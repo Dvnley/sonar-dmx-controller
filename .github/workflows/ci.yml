@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Vet and test
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          go test ./...
+      - name: Build Mac binaries
+        run: ./scripts/build-mac.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sonar_DMX_Controller_v0.3
+          path: dist/Sonar_DMX_Controller_v0.3
