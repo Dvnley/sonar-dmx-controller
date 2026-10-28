@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sonar DMX">
+<meta name="theme-color" content="#171a21">
+<title>Sonar DMX Controller</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Sonar DMX <span class="ver">v0.3</span></h1>
+  <div id="status" class="pill">checking…</div>
+  <nav>
+    <button data-tab="perform" class="active">Perform</button>
+    <button data-tab="live">Fixtures</button>
+    <button data-tab="patch">Patch</button>
+    <button data-tab="sweep">Channel sweep</button>
+    <button data-tab="setup">Setup</button>
+  </nav>
+</header>
+
+<div id="conflicts" class="banner warn hidden"></div>
+<div id="sweepbanner" class="banner info hidden"></div>
+<div id="error" class="banner err hidden"></div>
+
+<main>
+<!-- LIVE -->
+<section id="tab-perform" class="tab">
+  <div class="pbar">
+    <div class="chips" id="views"><span class="chiplabel">Layout</span></div>
+    <div class="chips" id="fades"><span class="chiplabel">Fade</span></div>
+  </div>
+
+  <div id="view-groups" class="pview"><div class="gcols" id="gcols"></div></div>
+
+  <div id="view-desk" class="pview hidden"><div class="desk" id="desk"></div></div>
+
+  <div id="view-stage" class="pview hidden">
+    <div class="stagewrap">
+      <div class="stagecol">
+        <div class="chips" id="stagesel"><span class="chiplabel">Select</span></div>
+        <div class="stage" id="stage"><div class="stagelabel">STAGE</div></div>
+        <label class="check"><input type="checkbox" id="stagemove"> Move lights (drag them to where they are in the room)</label>
+      </div>
+      <div class="tray">
+        <b id="traytitle">Nothing selected</b>
+        <div class="tswatches" id="tswatches"></div>
+        <label class="pmaster">Level <input id="traylevel" type="range" min="0" max="100"><span id="traylevelv"></span>%</label>
+      </div>
+    </div>
+  </div>
+
+  <div id="view-pads" class="pview hidden">
+    <div class="pbar"><div class="chips" id="groups"></div></div>
+    <div class="pmain">
+      <div class="pads" id="pads"></div>
+      <div class="pside">
+        <div class="wheel" id="wheel" title="Tap or drag to pick any color"><div class="wdot"></div></div>
+      </div>
+    </div>
+    <div class="pbar">
+      <div class="chips" id="strobe"><span class="chiplabel">Strobe</span></div>
+      <div class="chips" id="rainbow"><span class="chiplabel">Rainbow</span></div>
+    </div>
+  </div>
+
+  <div class="pbar showbar">
+    <button id="flash" class="hit flash">FLASH<small>hold</small></button>
+    <button id="pblackout" class="hit">BLACKOUT</button>
+    <label class="pmaster grow">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
+  </div>
+
+  <div class="card" id="progcard">
+    <div class="fhead"><b>Programs</b><span class="meta" id="progtarget"></span><span class="grow"></span><button id="progstop">Stop</button><button id="progstopall" class="danger">Stop all</button></div>
+    <div class="proggrid" id="proggrid"></div>
+    <div class="progrow">
+      <label class="pmaster">Speed <input id="pspeed" type="range" min="0" max="100"><span id="pspeedv"></span></label>
+      <label class="pmaster">Size <input id="psize" type="range" min="0" max="100"><span id="psizev"></span></label>
+    </div>
+    <div class="chips" id="palettes"><span class="chiplabel">Variation</span></div>
+    <div class="music">
+      <label class="check"><input type="checkbox" id="pmusic"> Music mode (step on the beat)</label>
+      <span class="bpm" id="bpm">no beat</span>
+      <button id="tap" class="hit">TAP</button>
+      <button id="mic">Listen with this Mac's mic</button>
+      <span class="hint" id="michint"></span>
+    </div>
+  </div>
+
+  <div class="card scenes">
+    <div class="fhead"><b>Scenes</b><button id="scenesave">Save to…</button><button id="sceneclear">Clear…</button></div>
+    <p class="hint" id="scenehint">Tap a scene to fade to it.</p>
+    <div class="scenegrid" id="scenegrid"></div>
+  </div>
+</section>
+
+<section id="tab-live" class="tab hidden">
+  <div class="bar">
+    <label class="master">Master <input id="master" type="range" min="0" max="100"><span id="masterv"></span>%</label>
+    <button id="blackout" class="big">Blackout</button>
+    <button id="test" class="big">RGBW test</button>
+  </div>
+
+  <div class="card">
+    <h2>Color <small id="colortarget">all color fixtures</small></h2>
+    <div class="swatches">
+      <button data-c="255,0,0,0,0,0" style="--sw:#f33">Red</button>
+      <button data-c="0,255,0,0,0,0" style="--sw:#3d3">Green</button>
+      <button data-c="0,0,255,0,0,0" style="--sw:#36f">Blue</button>
+      <button data-c="0,0,0,255,0,0" style="--sw:#fa0">Amber</button>
+      <button data-c="0,0,0,0,255,0" style="--sw:#eee">White</button>
+      <button data-c="0,0,0,0,0,255" style="--sw:#a3f">UV</button>
+      <button data-c="255,0,255,0,0,0" style="--sw:#f3f">Magenta</button>
+      <button data-c="0,255,255,0,0,0" style="--sw:#3ff">Cyan</button>
+      <button data-c="0,0,0,0,0,0" style="--sw:#333">Off</button>
+    </div>
+    <div class="mixer" id="mixer"></div>
+    <p class="hint">Tick fixtures below to color only those. Fixtures with a color wheel are changed from their own card.</p>
+  </div>
+
+  <div id="cards" class="cards"></div>
+</section>
+
+<!-- PATCH -->
+<section id="tab-patch" class="tab hidden">
+  <div class="card">
+    <h2>Patch</h2>
+    <p class="hint">Edit addresses, modes and channel maps, then <b>Save patch</b>. Overlapping fixtures are allowed but flagged: where two fixtures share a channel the higher value wins.</p>
+    <div class="scroll"><table id="patchtable">
+      <thead><tr><th>Name</th><th>Profile</th><th>Mode</th><th>Univ</th><th>Address</th><th>Chs</th><th>On</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <div class="row">
+      <select id="addprofile"></select>
+      <button id="addfixture">Add fixture</button>
+      <span class="grow"></span>
+      <button id="revertpatch">Revert</button>
+      <button id="savepatch" class="primary">Save patch</button>
+    </div>
+    <div id="patchwarn"></div>
+  </div>
+  <div class="card">
+    <h2>DMX map</h2>
+    <div id="dmxmap"></div>
+  </div>
+</section>
+
+<!-- SWEEP -->
+<section id="tab-sweep" class="tab hidden">
+  <div class="card">
+    <h2>Channel sweep</h2>
+    <p class="hint">While a sweep runs it replaces the normal output (everything not listed is 0), so there is only one Art-Net sender. Use <b>Manual</b> to step at your own pace and note what each channel does.</p>
+    <div class="presets">
+      <button data-preset="spot1">Spot pass 1: ch 1-9 alone</button>
+      <button data-preset="spot2">Spot pass 2: dimmer + shutter open, centered</button>
+      <button data-preset="wash">Wash R, G, B, all (17-19)</button>
+    </div>
+    <div class="form">
+      <label>Universe <input id="sw-uni" type="number" min="0" value="0"></label>
+      <label>From ch <input id="sw-from" type="number" min="1" max="512" value="1"></label>
+      <label>To ch <input id="sw-to" type="number" min="1" max="512" value="9"></label>
+      <label>Value <input id="sw-val" type="number" min="0" max="255" value="255"></label>
+      <label>Hold s <input id="sw-hold" type="number" min="0" step="0.5" value="4"></label>
+      <label>Gap s <input id="sw-gap" type="number" min="0" step="0.5" value="2"></label>
+      <label class="wide">Hold these in every step <input id="sw-base" placeholder="e.g. 1=128,2=128,6=255"></label>
+      <label class="check"><input id="sw-manual" type="checkbox"> Manual (Next/Prev)</label>
+    </div>
+    <div class="row"><button id="sw-start" class="primary">Start sweep</button></div>
+    <details>
+      <summary>Run a probe script</summary>
+      <p class="hint">Same format as artnet.py: <code>seconds:ch=val,ch=val;seconds:...</code></p>
+      <textarea id="sw-script" rows="2">5:17=255;5:18=255;5:19=255;5:17=255,18=255,19=255;2:</textarea>
+      <div class="row"><label class="check"><input id="sw-script-manual" type="checkbox"> Manual</label><button id="sw-runscript">Run script</button></div>
+    </details>
+  </div>
+
+  <div class="card" id="sw-live">
+    <h2>Now sending</h2>
+    <div id="sw-now" class="now">nothing (normal output)</div>
+    <div id="sw-next" class="hint"></div>
+    <div class="row">
+      <button id="sw-prev">◀ Prev</button>
+      <button id="sw-nextb">Next ▶</button>
+      <button id="sw-stop" class="danger">Stop</button>
+    </div>
+    <div class="row">
+      <input id="sw-note" class="grow" placeholder="What did the lights do? (e.g. spot tilted up)">
+      <button id="sw-addnote">Save note</button>
+    </div>
+    <textarea id="sw-log" rows="8" placeholder="Notes appear here, one per step. Copy them into the chat."></textarea>
+    <div class="row"><button id="sw-copy">Copy notes</button><button id="sw-clear">Clear notes</button></div>
+  </div>
+</section>
+
+<!-- SETUP -->
+<section id="tab-setup" class="tab hidden">
+  <div class="card">
+    <h2>Art-Net</h2>
+    <div class="form">
+      <label>Node IP (DMX-AN2) <input id="target"></label>
+      <label>Frames per second <input id="fps" type="number" min="1" max="44"></label>
+    </div>
+    <div class="row"><button id="savecfg" class="primary">Save</button><button id="pollnow">Poll for nodes</button></div>
+    <p class="hint">FPS changes apply after a restart.</p>
+  </div>
+  <div class="card" id="remotecard">
+    <h2>iPad remote</h2>
+    <div id="remote"></div>
+  </div>
+  <div class="card">
+    <h2>Diagnostics</h2>
+    <dl id="diag"></dl>
+    <h3>Nodes that answered ArtPoll</h3>
+    <div id="nodes"></div>
+  </div>
+</section>
+</main>
+
+<script src="app.js"></script>
+<script src="views.js"></script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+/dist/
+/sonar-dmx
+*.test
+.DS_Store
