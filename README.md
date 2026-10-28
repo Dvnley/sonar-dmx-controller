@@ -23,8 +23,12 @@ DMX transmitter → receivers on the fixtures.
    yourself, see below).
 2. Double-click `START-APPLE-SILICON.command` (M1 and newer) or
    `START-INTEL.command`. The browser opens on the controller.
-3. If macOS refuses to open the script, right-click it, choose **Open**, then
-   **Open** again.
+3. If macOS says it "could not verify" the script, click **Done** (not Move
+   to Trash). Then either open System Settings, Privacy & Security, and
+   click **Open Anyway** at the bottom (once for the script, once for the
+   binary), or unblock the whole folder in Terminal:
+   `xattr -dr com.apple.quarantine <drag the folder here>`.
+   This happens because the app is not signed with an Apple developer ID.
 
 The status pill at the top says whether the Mac has a `2.x.x.x` address and
 whether the AN2 answered ArtPoll. The Setup tab has the details.
