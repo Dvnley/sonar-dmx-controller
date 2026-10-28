@@ -489,6 +489,23 @@ function renderDiag() {
   $$("#nodes button[data-ip]").forEach(b => b.onclick = async () => { await api("/api/config", { target_ip: b.dataset.ip }); refreshDiag(); });
 }
 
+async function refreshRemote() {
+  let r;
+  try { r = await (await fetch("/api/remote")).json(); } catch (_) { return; }
+  const el = $("#remote");
+  if (!r.enabled) {
+    el.innerHTML = `<p class="hint">Off. To control the rig from an iPad, quit the app and start it with <b>START-WITH-IPAD.command</b>. The iPad and this Mac need to be on the same Wi-Fi.</p>`;
+    return;
+  }
+  if (!r.pin) {
+    el.innerHTML = `<p class="hint">You are connected as a remote. Tip: in Safari, tap Share, then <b>Add to Home Screen</b> to open this like an app.</p>`;
+    return;
+  }
+  el.innerHTML = `<p class="hint">On the iPad, open one of these in Safari, then enter the PIN. Tap Share, then <b>Add to Home Screen</b> to open it like an app.</p>
+    <dl><dt>Address</dt><dd>${r.urls.map(u => `<code>${esc(u)}</code>`).join("<br>") || "no Wi-Fi address found"}</dd>
+    <dt>PIN</dt><dd class="now">${esc(r.pin)}</dd></dl>`;
+}
+
 async function refreshDiag() {
   try { diag = await (await fetch("/api/diag")).json(); } catch (_) { diag = null; }
   renderDiag();
@@ -505,5 +522,6 @@ async function refreshState() {
   buildMixer();
   await refreshState();
   refreshDiag();
+  refreshRemote();
   setInterval(refreshDiag, 3000);
 })();

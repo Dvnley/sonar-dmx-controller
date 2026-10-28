@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sonar DMX">
+<meta name="theme-color" content="#171a21">
 <title>Sonar DMX Controller</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -132,6 +136,10 @@
     </div>
     <div class="row"><button id="savecfg" class="primary">Save</button><button id="pollnow">Poll for nodes</button></div>
     <p class="hint">FPS changes apply after a restart.</p>
+  </div>
+  <div class="card" id="remotecard">
+    <h2>iPad remote</h2>
+    <div id="remote"></div>
   </div>
   <div class="card">
     <h2>Diagnostics</h2>

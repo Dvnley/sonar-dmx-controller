@@ -31,7 +31,7 @@ func do(t *testing.T, h http.Handler, method, path, body string) (int, map[strin
 
 func TestV02Endpoints(t *testing.T) {
 	c, _ := controller.New("", nopNet{})
-	h := New(c)
+	h := New(c, Options{})
 	if code, d := do(t, h, "GET", "/api/diag", ""); code != 200 || d["an2_online"] != true || d["target"] != "2.0.0.1" {
 		t.Fatalf("diag: %d %v", code, d)
 	}
@@ -75,12 +75,59 @@ func TestV02Endpoints(t *testing.T) {
 
 func TestUIServed(t *testing.T) {
 	c, _ := controller.New("", nopNet{})
-	h := New(c)
+	h := New(c, Options{})
 	for _, p := range []string{"/", "/app.js", "/style.css"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest("GET", p, nil))
 		if rec.Code != 200 || rec.Body.Len() < 100 {
 			t.Errorf("%s: %d (%d bytes)", p, rec.Code, rec.Body.Len())
 		}
+	}
+}
+
+func TestRemotePIN(t *testing.T) {
+	c, _ := controller.New("", nopNet{})
+	h := New(c, Options{PIN: "123456", URLs: []string{"http://mac.local:8080"}})
+	get := func(path, remote, cookie string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("GET", path, nil)
+		req.RemoteAddr = remote
+		if cookie != "" {
+			req.AddCookie(&http.Cookie{Name: pinCookie, Value: cookie})
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := get("/api/state", "127.0.0.1:5000", ""); rec.Code != 200 {
+		t.Errorf("Mac itself should not need a PIN, got %d", rec.Code)
+	}
+	if rec := get("/api/state", "192.168.1.20:5000", ""); rec.Code != 401 {
+		t.Errorf("iPad without PIN: got %d, want 401", rec.Code)
+	}
+	if rec := get("/", "192.168.1.20:5000", ""); !strings.Contains(rec.Body.String(), `action="/login"`) {
+		t.Error("iPad without PIN should get the login page")
+	}
+	if rec := get("/api/state", "192.168.1.20:5000", "123456"); rec.Code != 200 {
+		t.Errorf("iPad with PIN cookie: got %d", rec.Code)
+	}
+
+	req := httptest.NewRequest("POST", "/login", strings.NewReader("pin=123456"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.RemoteAddr = "192.168.1.20:5000"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther || !strings.Contains(rec.Header().Get("Set-Cookie"), pinCookie+"=123456") {
+		t.Errorf("login: %d %q", rec.Code, rec.Header().Get("Set-Cookie"))
+	}
+
+	var info map[string]any
+	_ = json.Unmarshal(get("/api/remote", "127.0.0.1:5000", "").Body.Bytes(), &info)
+	if info["pin"] != "123456" || info["enabled"] != true {
+		t.Errorf("remote info on the Mac: %v", info)
+	}
+	info = nil
+	_ = json.Unmarshal(get("/api/remote", "192.168.1.20:5000", "123456").Body.Bytes(), &info)
+	if _, ok := info["pin"]; ok {
+		t.Error("PIN must not be sent to other devices")
 	}
 }

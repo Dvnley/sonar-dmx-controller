@@ -33,7 +33,25 @@ Settings, the patch and the last values are saved to
 `~/Library/Application Support/SonarDMX/config.json`. Delete that file to go
 back to the default rig.
 
-Command-line flags: `-addr 127.0.0.1:8080`, `-config <path>`, `-no-browser`.
+Command-line flags: `-addr 127.0.0.1:8080`, `-config <path>`, `-no-browser`,
+`-remote`, `-pin <digits>`.
+
+## iPad remote
+
+The Mac still sends the Art-Net; the iPad is a touch remote for it.
+
+1. Start the app with `START-WITH-IPAD.command` instead of the other START
+   script. The Mac and the iPad must be on the same Wi-Fi.
+2. On the Mac, the Setup tab (and the Terminal window) shows the address to
+   open on the iPad, such as `http://Danleys-MacBook.local:8080`, and a
+   6-digit PIN.
+3. On the iPad, open that address in Safari and enter the PIN. Then tap
+   Share, **Add to Home Screen** to get an app icon.
+
+The PIN is made once and saved in the config, so the iPad stays signed in.
+Other devices without it see only the PIN page. The Mac itself never needs
+the PIN. If the iPad can't connect, check that macOS allowed incoming
+connections for the app (System Settings, Network, Firewall).
 
 ## The rig (default patch)
 

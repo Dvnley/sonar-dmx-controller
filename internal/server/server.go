@@ -17,7 +17,7 @@ import (
 var webFS embed.FS
 
 // New returns the handler for the API and the UI.
-func New(c *controller.Controller) http.Handler {
+func New(c *controller.Controller, opts Options) http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(webFS, "web")
 	mux.Handle("GET /", http.FileServer(http.FS(static)))
@@ -141,7 +141,17 @@ func New(c *controller.Controller) http.Handler {
 			result(w, c, c.StepSweep(body.Delta))
 		}
 	})
-	return mux
+	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
+		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}
+		if opts.URLs == nil {
+			info["urls"] = []string{}
+		}
+		if isLocal(r) {
+			info["pin"] = opts.PIN
+		}
+		reply(w, info)
+	})
+	return guard(opts, mux)
 }
 
 // parseTargets accepts "all", a missing field, a list of indexes, or one index.

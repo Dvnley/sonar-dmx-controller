@@ -3,9 +3,11 @@ package controller
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -24,6 +26,9 @@ type Config struct {
 	FPS      int               `json:"fps"`
 	Master   int               `json:"master"` // 0-100
 	Fixtures []fixture.Fixture `json:"fixtures"`
+	// RemotePIN guards the UI when it is opened from another device (the
+	// iPad). It is made once and kept so the iPad stays signed in.
+	RemotePIN string `json:"remote_pin,omitempty"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
@@ -115,6 +120,22 @@ func (c *Controller) changed() {
 		c.saveT.Stop()
 	}
 	c.saveT = time.AfterFunc(300*time.Millisecond, func() { _ = c.Save() })
+}
+
+// RemotePIN returns the PIN for remote devices, creating a 6-digit one the
+// first time.
+func (c *Controller) RemotePIN() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cfg.RemotePIN == "" {
+		n, err := rand.Int(rand.Reader, big.NewInt(1000000))
+		if err != nil {
+			n = big.NewInt(time.Now().UnixNano() % 1000000)
+		}
+		c.cfg.RemotePIN = fmt.Sprintf("%06d", n.Int64())
+		c.changed()
+	}
+	return c.cfg.RemotePIN
 }
 
 // Save writes the config to disk now.

@@ -183,3 +183,11 @@ func TestPatchSaveAndReload(t *testing.T) {
 
 func ptr(v int) *int       { return &v }
 func str(v string) *string { return &v }
+
+func TestRemotePINIsStable(t *testing.T) {
+	c, _ := newTest(t)
+	pin := c.RemotePIN()
+	if len(pin) != 6 || c.RemotePIN() != pin {
+		t.Fatalf("pin %q not stable", pin)
+	}
+}
