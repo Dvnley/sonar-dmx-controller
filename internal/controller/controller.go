@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"net"
 	"os"
@@ -28,7 +29,8 @@ type Config struct {
 	Fixtures []fixture.Fixture `json:"fixtures"`
 	// RemotePIN guards the UI when it is opened from another device (the
 	// iPad). It is made once and kept so the iPad stays signed in.
-	RemotePIN string `json:"remote_pin,omitempty"`
+	RemotePIN string  `json:"remote_pin,omitempty"`
+	Scenes    []Scene `json:"scenes,omitempty"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
@@ -68,6 +70,13 @@ type Controller struct {
 	sendErr  string
 	saveT    *time.Timer
 
+	fades        map[int]*fade
+	flashUntil   time.Time
+	strobeHz     float64
+	rainbowSec   float64
+	rainbowStart time.Time
+	strobeStart  time.Time
+
 	Net       Sender
 	BoundPort bool
 	now       func() time.Time
@@ -79,7 +88,7 @@ var testColors = []string{"red", "green", "blue", "white"}
 
 // New loads the config at path, or starts from DefaultConfig if it is missing.
 func New(path string, sender Sender) (*Controller, error) {
-	c := &Controller{cfg: DefaultConfig(), path: path, Net: sender, now: time.Now}
+	c := &Controller{cfg: DefaultConfig(), path: path, Net: sender, now: time.Now, fades: map[int]*fade{}}
 	if path != "" {
 		data, err := os.ReadFile(path)
 		switch {
@@ -228,8 +237,7 @@ func (c *Controller) frames() map[int][]byte {
 		}
 		c.sweep = nil
 	}
-	fixtures := c.cfg.Fixtures
-	out := fixture.Output{Master: c.cfg.Master, Blackout: c.blackout}
+	fixtures, out := c.performLook(now)
 	if phase := c.testPhase(now); phase >= 0 {
 		fixtures = testLook(fixtures, testColors[phase])
 		out = fixture.Output{Master: 100}
@@ -309,6 +317,7 @@ type State struct {
 	Sweep       *SweepStatus          `json:"sweep"`
 	ConfigPath  string                `json:"config_path"`
 	Types       []fixture.ChannelType `json:"channel_types"`
+	Perform     PerformState          `json:"perform"`
 }
 
 // State snapshots everything the UI needs.
@@ -320,6 +329,7 @@ func (c *Controller) State() State {
 		TargetIP: c.cfg.TargetIP, FPS: c.cfg.FPS, Master: c.cfg.Master, Blackout: c.blackout,
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
+		Perform: c.performState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}
@@ -414,10 +424,14 @@ func (c *Controller) SetMaster(v int) {
 // ColorSet is the /api/color body. Nil fields are left unchanged.
 type ColorSet struct {
 	R, G, B, A, W, UV, Dimmer *int
+	Fade                      float64 // seconds
 }
 
-// SetColor applies a color to the listed fixtures (nil = all). Fixtures
-// without that emitter are skipped; a color wheel fixture is not touched.
+// SetColor applies a color to the listed fixtures (nil = all), fading over
+// col.Fade seconds. A full color (r, g and b all given) is mixed into RGB on
+// fixtures that lack amber, white or UV emitters, so "Amber" still shows on
+// the RGB-only wash. Fixtures with a color wheel are not touched. It also
+// stops the rainbow effect.
 func (c *Controller) SetColor(targets []int, col ColorSet) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -425,15 +439,36 @@ func (c *Controller) SetColor(targets []int, col ColorSet) error {
 	if err != nil {
 		return err
 	}
-	pairs := []struct {
-		t fixture.ChannelType
-		v *int
-	}{{fixture.Red, col.R}, {fixture.Green, col.G}, {fixture.Blue, col.B}, {fixture.Amber, col.A}, {fixture.White, col.W}, {fixture.UV, col.UV}, {fixture.Dimmer, col.Dimmer}}
+	now := c.now()
+	c.rainbowSec = 0
+	full := col.R != nil && col.G != nil && col.B != nil
 	for _, i := range idx {
 		f := &c.cfg.Fixtures[i]
-		for _, p := range pairs {
-			if p.v != nil {
-				f.Set(p.t, uint8(clamp(*p.v, 0, 255)))
+		if !f.HasColor() && col.Dimmer == nil {
+			continue
+		}
+		vals := map[fixture.ChannelType]*int{
+			fixture.Red: col.R, fixture.Green: col.G, fixture.Blue: col.B,
+			fixture.Amber: col.A, fixture.White: col.W, fixture.UV: col.UV, fixture.Dimmer: col.Dimmer,
+		}
+		if full {
+			r, g, b := float64(*col.R), float64(*col.G), float64(*col.B)
+			mix := func(t fixture.ChannelType, v *int, mr, mg, mb float64) {
+				if v != nil && *v > 0 && f.Find(t) < 0 {
+					k := float64(*v) / 255
+					r, g, b = r+mr*k, g+mg*k, b+mb*k
+				}
+			}
+			mix(fixture.Amber, col.A, 255, 150, 0)
+			mix(fixture.White, col.W, 255, 255, 255)
+			mix(fixture.UV, col.UV, 90, 0, 255)
+			ri, gi, bi := int(math.Min(r, 255)), int(math.Min(g, 255)), int(math.Min(b, 255))
+			vals[fixture.Red], vals[fixture.Green], vals[fixture.Blue] = &ri, &gi, &bi
+		}
+		c.beginFade(i, seconds(col.Fade), now)
+		for t, v := range vals {
+			if v != nil {
+				f.Set(t, uint8(clamp(*v, 0, 255)))
 			}
 		}
 	}
@@ -458,6 +493,7 @@ func (c *Controller) UpdateFixture(u FixtureUpdate) error {
 		return fmt.Errorf("no fixture %d", u.Index)
 	}
 	f := &c.cfg.Fixtures[u.Index]
+	delete(c.fades, u.Index)
 	if u.Brightness != nil {
 		f.Brightness = clamp(*u.Brightness, 0, 100)
 	}
@@ -501,6 +537,7 @@ func (c *Controller) ResetFixture(index int) error {
 		return fmt.Errorf("no fixture %d", index)
 	}
 	f := &c.cfg.Fixtures[index]
+	delete(c.fades, index)
 	for i, ch := range f.Channels {
 		f.Values[i] = ch.Default
 	}
@@ -586,6 +623,7 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cfg.Fixtures = fixtures
+	c.fades = map[int]*fade{}
 	c.changed()
 	return nil
 }

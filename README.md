@@ -82,7 +82,15 @@ channels.
 
 ## Pages
 
-- **Live**: master, blackout, RGBW test, color presets and mixer for all (or
+- **Perform** (the default, built for the iPad): pick a group (all, the
+  uplights or the wash), then tap a color pad or the color wheel. The fade
+  chips set how long color changes and scene recalls take. **FLASH** holds
+  every color fixture at full white while your finger is down; **BLACKOUT**
+  toggles; strobe and rainbow run until you turn them off (tapping a color
+  stops the rainbow). Scenes: tap **Save to…** then a slot to store the
+  current look, tap a saved scene to fade to it. On the RGB-only wash, the
+  Amber, White, UV and Warm pads are mixed from red, green and blue.
+- **Fixtures**: master, blackout, RGBW test, color presets and mixer for all (or
   ticked) color fixtures, and a card per fixture with brightness and a fader
   per channel. Moving heads get a pan/tilt pad plus Center, Light on/off and
   Reset buttons.
@@ -132,6 +140,11 @@ New in v0.3:
 | `POST /api/sweep/step` | `{"delta": 1}` or `-1` for a manual sweep |
 | `POST /api/sweep/stop` | `{}` |
 | `POST /api/poll` | `{}`: send ArtPoll now |
+| `POST /api/color` | also takes `"fade"` in seconds |
+| `POST /api/flash` | `{"on": true}` while held, `{"on": false}` on release |
+| `POST /api/strobe` | `{"hz": 5}`, 0 stops |
+| `POST /api/rainbow` | `{"seconds": 10}` per cycle, 0 stops |
+| `POST /api/scene/save`, `/recall`, `/clear` | `{"slot": 0-7, "name", "fade"}` |
 
 Example: `curl -s -X POST localhost:8080/api/color -d '{"fixtures":"all","r":255}'`
 

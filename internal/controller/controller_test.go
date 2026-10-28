@@ -191,3 +191,95 @@ func TestRemotePINIsStable(t *testing.T) {
 		t.Fatalf("pin %q not stable", pin)
 	}
 }
+
+func TestColorFade(t *testing.T) {
+	c, now := newTest(t)
+	c.SetColor([]int{6}, ColorSet{R: ptr(200), G: ptr(0), B: ptr(0), Fade: 2})
+	if f := c.Frames()[0]; f[16] != 0 {
+		t.Fatalf("fade start: wash red = %d, want 0", f[16])
+	}
+	*now = now.Add(time.Second)
+	if f := c.Frames()[0]; f[16] != 100 {
+		t.Fatalf("fade middle: wash red = %d, want 100", f[16])
+	}
+	if c.State().Fixtures[6].Values[0] != 200 {
+		t.Error("state should report the fade target")
+	}
+	*now = now.Add(2 * time.Second)
+	if f := c.Frames()[0]; f[16] != 200 {
+		t.Fatalf("fade end: wash red = %d, want 200", f[16])
+	}
+}
+
+func TestAmberFallsBackToRGBOnWash(t *testing.T) {
+	c, _ := newTest(t)
+	c.SetColor(nil, ColorSet{R: ptr(0), G: ptr(0), B: ptr(0), A: ptr(255), W: ptr(0), UV: ptr(0)})
+	s := c.State()
+	if v := s.Fixtures[6].Values; v[0] != 255 || v[1] != 150 || v[2] != 0 {
+		t.Errorf("wash amber = %v, want 255,150,0", v)
+	}
+	if v := s.Fixtures[0].Values; v[0] != 0 || v[3] != 255 {
+		t.Errorf("uplight should use its amber channel, got %v", v)
+	}
+}
+
+func TestFlashStrobeRainbow(t *testing.T) {
+	c, now := newTest(t)
+	c.SetBlackout(ptrb(true))
+	c.SetFlash(true)
+	if f := c.Frames()[0]; f[16] != 255 || f[4] != 255 {
+		t.Fatalf("flash should override blackout: wash r=%d uplight w=%d", f[16], f[4])
+	}
+	c.SetFlash(false)
+	c.SetBlackout(ptrb(false))
+	c.SetColor(nil, ColorSet{R: ptr(255), G: ptr(0), B: ptr(0)})
+	c.SetStrobe(2) // 4 half-periods per second
+	if f := c.Frames()[0]; f[16] != 255 {
+		t.Fatal("strobe on-phase should show the color")
+	}
+	*now = now.Add(300 * time.Millisecond)
+	if f := c.Frames()[0]; f[16] != 0 {
+		t.Fatal("strobe off-phase should be dark")
+	}
+	c.SetStrobe(0)
+	c.SetRainbow(8)
+	a := c.Frames()[0]
+	*now = now.Add(2 * time.Second)
+	b := c.Frames()[0]
+	if a[16] == b[16] && a[17] == b[17] && a[18] == b[18] {
+		t.Error("rainbow did not change the wash color")
+	}
+	c.SetColor(nil, ColorSet{R: ptr(0), G: ptr(255), B: ptr(0)})
+	if c.State().Perform.RainbowSec != 0 {
+		t.Error("picking a color should stop the rainbow")
+	}
+}
+
+func TestScenes(t *testing.T) {
+	c, now := newTest(t)
+	c.SetColor(nil, ColorSet{R: ptr(0), G: ptr(0), B: ptr(255)})
+	if err := c.SaveScene(2, "Blue wash"); err != nil {
+		t.Fatal(err)
+	}
+	c.SetColor(nil, ColorSet{R: ptr(255), G: ptr(0), B: ptr(0)})
+	if err := c.RecallScene(2, 1); err != nil {
+		t.Fatal(err)
+	}
+	*now = now.Add(500 * time.Millisecond)
+	if f := c.Frames()[0]; f[16] != 128 || f[18] != 128 {
+		t.Fatalf("mid-recall wash = %d,%d,%d", f[16], f[17], f[18])
+	}
+	sc := c.State().Perform.Scenes
+	if len(sc) != SceneSlots || !sc[2].Saved || sc[2].Name != "Blue wash" || sc[2].Color != "rgb(0,0,255)" || sc[0].Saved {
+		t.Fatalf("scenes = %+v", sc)
+	}
+	if c.RecallScene(5, 0) == nil {
+		t.Error("recalling an empty slot should fail")
+	}
+	c.ClearScene(2)
+	if c.State().Perform.Scenes[2].Saved {
+		t.Error("scene not cleared")
+	}
+}
+
+func ptrb(v bool) *bool { return &v }

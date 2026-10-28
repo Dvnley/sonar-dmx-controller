@@ -49,13 +49,14 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			W        *int            `json:"w"`
 			UV       *int            `json:"uv"`
 			Dimmer   *int            `json:"dimmer"`
+			Fade     float64         `json:"fade"`
 		}
 		if !decode(w, r, &body) {
 			return
 		}
 		targets, err := parseTargets(body.Fixtures)
 		if err == nil {
-			err = c.SetColor(targets, controller.ColorSet{R: body.R, G: body.G, B: body.B, A: body.A, W: body.W, UV: body.UV, Dimmer: body.Dimmer})
+			err = c.SetColor(targets, controller.ColorSet{R: body.R, G: body.G, B: body.B, A: body.A, W: body.W, UV: body.UV, Dimmer: body.Dimmer, Fade: body.Fade})
 		}
 		result(w, c, err)
 	})
@@ -140,6 +141,57 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		if decode(w, r, &body) {
 			result(w, c, c.StepSweep(body.Delta))
 		}
+	})
+	// live performance
+	mux.HandleFunc("POST /api/flash", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On bool `json:"on"`
+		}
+		if decode(w, r, &body) {
+			c.SetFlash(body.On)
+			reply(w, c.State())
+		}
+	})
+	mux.HandleFunc("POST /api/strobe", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Hz float64 `json:"hz"`
+		}
+		if decode(w, r, &body) {
+			c.SetStrobe(body.Hz)
+			reply(w, c.State())
+		}
+	})
+	mux.HandleFunc("POST /api/rainbow", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Seconds float64 `json:"seconds"`
+		}
+		if decode(w, r, &body) {
+			c.SetRainbow(body.Seconds)
+			reply(w, c.State())
+		}
+	})
+	mux.HandleFunc("POST /api/scene/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Slot int     `json:"slot"`
+			Name string  `json:"name"`
+			Fade float64 `json:"fade"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "save":
+			err = c.SaveScene(body.Slot, body.Name)
+		case "recall":
+			err = c.RecallScene(body.Slot, body.Fade)
+		case "clear":
+			err = c.ClearScene(body.Slot)
+		default:
+			fail(w, http.StatusNotFound, "unknown scene action")
+			return
+		}
+		result(w, c, err)
 	})
 	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}

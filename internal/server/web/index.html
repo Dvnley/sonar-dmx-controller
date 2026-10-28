@@ -15,7 +15,8 @@
   <h1>Sonar DMX <span class="ver">v0.3</span></h1>
   <div id="status" class="pill">checking…</div>
   <nav>
-    <button data-tab="live" class="active">Live</button>
+    <button data-tab="perform" class="active">Perform</button>
+    <button data-tab="live">Fixtures</button>
     <button data-tab="patch">Patch</button>
     <button data-tab="sweep">Channel sweep</button>
     <button data-tab="setup">Setup</button>
@@ -28,7 +29,32 @@
 
 <main>
 <!-- LIVE -->
-<section id="tab-live" class="tab">
+<section id="tab-perform" class="tab">
+  <div class="pbar">
+    <div class="chips" id="groups"></div>
+    <div class="chips" id="fades"><span class="chiplabel">Fade</span></div>
+  </div>
+  <div class="pmain">
+    <div class="pads" id="pads"></div>
+    <div class="pside">
+      <div class="wheel" id="wheel" title="Tap or drag to pick any color"><div class="wdot"></div></div>
+      <label class="pmaster">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
+    </div>
+  </div>
+  <div class="pbar">
+    <button id="flash" class="hit flash">FLASH<small>hold</small></button>
+    <button id="pblackout" class="hit">BLACKOUT</button>
+    <div class="chips" id="strobe"><span class="chiplabel">Strobe</span></div>
+    <div class="chips" id="rainbow"><span class="chiplabel">Rainbow</span></div>
+  </div>
+  <div class="card scenes">
+    <div class="fhead"><b>Scenes</b><button id="scenesave">Save to…</button><button id="sceneclear">Clear…</button></div>
+    <p class="hint" id="scenehint">Tap a scene to fade to it.</p>
+    <div class="scenegrid" id="scenegrid"></div>
+  </div>
+</section>
+
+<section id="tab-live" class="tab hidden">
   <div class="bar">
     <label class="master">Master <input id="master" type="range" min="0" max="100"><span id="masterv"></span>%</label>
     <button id="blackout" class="big">Blackout</button>

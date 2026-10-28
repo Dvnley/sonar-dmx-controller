@@ -7,7 +7,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 let state = null;
 let diag = null;
 let profiles = [];
-let tab = "live";
+let tab = "perform";
 let cardSig = "";
 let patchDraft = null;
 let patchDirty = false;
@@ -78,23 +78,159 @@ $$("nav button").forEach(b => b.onclick = () => {
 function render() {
   if (!state) return;
   renderBanners();
+  renderPerform();
   renderLive();
   if (tab === "patch") { if (!patchDraft) resetDraft(); renderPatchWarnings(); }
   renderSweep();
   renderSetup();
 }
 
+let conflictHTML = "";
 function renderBanners() {
   const c = $("#conflicts");
-  if (state.conflicts.length) {
-    c.innerHTML = "<b>Address overlap:</b> fixtures share DMX channels, so they will fight. Re-patch one group in the Patch tab or move it to another universe."
-      + "<ul>" + state.conflicts.map(x => `<li>${esc(x.message)}</li>`).join("") + "</ul>";
-  }
+  const html = state.conflicts.length ? `<details><summary><b>Address overlap:</b> ${state.conflicts.length} pair${state.conflicts.length > 1 ? "s" : ""} of fixtures share DMX channels. Tap for details.</summary>
+    Re-patch one group in the Patch tab or move it to another universe.<ul>${state.conflicts.map(x => `<li>${esc(x.message)}</li>`).join("")}</ul></details>` : "";
+  if (html !== conflictHTML) { conflictHTML = html; c.innerHTML = html; }
   c.classList.toggle("hidden", !state.conflicts.length);
   const s = $("#sweepbanner");
   s.innerHTML = state.sweep ? `Channel sweep running on universe ${state.sweep.universe}: <b>${esc(state.sweep.label)}</b>. Normal output is paused. <button id="banner-stop">Stop sweep</button>` : "";
   s.classList.toggle("hidden", !state.sweep);
   if (state.sweep) $("#banner-stop").onclick = () => api("/api/sweep/stop", {});
+}
+
+// ---------- perform ----------
+const PADS = [
+  ["Red", "#ff2a2a", [255, 0, 0, 0, 0, 0]],
+  ["Orange", "#ff7a1a", [255, 80, 0, 0, 0, 0]],
+  ["Amber", "#ffb000", [0, 0, 0, 255, 0, 0]],
+  ["Yellow", "#ffe03a", [255, 180, 0, 0, 0, 0]],
+  ["Green", "#2bd94a", [0, 255, 0, 0, 0, 0]],
+  ["Cyan", "#2be0ff", [0, 255, 255, 0, 0, 0]],
+  ["Blue", "#2f5bff", [0, 0, 255, 0, 0, 0]],
+  ["UV", "#8a2bff", [0, 0, 0, 0, 0, 255]],
+  ["Magenta", "#ff2bd6", [255, 0, 255, 0, 0, 0]],
+  ["Pink", "#ff6fa8", [255, 40, 120, 0, 0, 0]],
+  ["White", "#ffffff", [0, 0, 0, 0, 255, 0]],
+  ["Warm", "#ffd9a0", [0, 0, 0, 200, 255, 0]],
+];
+const FADES = [["Snap", 0], ["0.5s", 0.5], ["1s", 1], ["2s", 2], ["5s", 5]];
+const STROBES = [["Off", 0], ["2", 2], ["5", 5], ["10", 10]];
+const RAINBOWS = [["Off", 0], ["Slow", 30], ["Med", 10], ["Fast", 3]];
+let group = "all";
+let fadeSec = loadPref("fade", 0.5);
+let activePad = "";
+let sceneMode = "";
+
+function loadPref(k, d) { try { const v = localStorage.getItem("sonar-" + k); return v === null ? d : JSON.parse(v); } catch (_) { return d; } }
+function savePref(k, v) { try { localStorage.setItem("sonar-" + k, JSON.stringify(v)); } catch (_) { /* ignore */ } }
+
+function groups() {
+  const g = [["All", "all"]];
+  const seen = new Set();
+  for (const f of state.fixtures) {
+    if (!hasColor(f) || seen.has(f.profile)) continue;
+    seen.add(f.profile);
+    const n = state.fixtures.filter(x => x.profile === f.profile).length;
+    g.push([n > 1 ? `${f.profile_name.replace(/^Chauvet /, "")} ×${n}` : f.name, f.profile]);
+  }
+  return g;
+}
+function groupTargets() {
+  return group === "all" ? "all" : state.fixtures.filter(f => f.profile === group).map(f => f.index);
+}
+
+function chips(el, items, current, onPick) {
+  const label = $(".chiplabel", el);
+  el.innerHTML = (label ? label.outerHTML : "") + items.map(([name, v]) => `<button class="chip ${String(v) === String(current) ? "on" : ""}" data-v="${esc(v)}">${esc(name)}</button>`).join("");
+  $$("button", el).forEach(b => b.onclick = () => onPick(b.dataset.v));
+}
+
+function sendColor(rgbauv) {
+  const [r, g, b, a, w, uv] = rgbauv;
+  return api("/api/color", { fixtures: groupTargets(), r, g, b, a, w, uv, fade: fadeSec });
+}
+
+$("#pads").innerHTML = PADS.map(([n, css]) => `<button class="pad" data-pad="${n}" style="--pc:${css}"><span>${n}</span></button>`).join("");
+$$("#pads .pad").forEach(b => b.onclick = () => {
+  activePad = b.dataset.pad;
+  sendColor(PADS.find(p => p[0] === activePad)[2]);
+  renderPerform();
+});
+
+(function wheel() {
+  const el = $("#wheel"), dot = $(".wdot", el);
+  const pick = e => {
+    const r = el.getBoundingClientRect();
+    const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2);
+    const rad = r.width / 2;
+    const sat = Math.min(1, Math.hypot(dx, dy) / rad);
+    const hue = ((Math.atan2(dx, -dy) / (2 * Math.PI)) + 1) % 1; // 0 at top, clockwise, matches the conic gradient
+    dot.style.left = (50 + Math.sin(hue * 2 * Math.PI) * sat * 50) + "%";
+    dot.style.top = (50 - Math.cos(hue * 2 * Math.PI) * sat * 50) + "%";
+    dot.style.display = "block";
+    const [R, G, B] = hsvToRgb(hue, sat, 1);
+    dot.style.background = `rgb(${R},${G},${B})`;
+    activePad = "";
+    throttled("wheel", () => api("/api/color", { fixtures: groupTargets(), r: R, g: G, b: B, a: 0, w: 0, uv: 0, fade: 0 }));
+  };
+  el.onpointerdown = e => { el.setPointerCapture(e.pointerId); pick(e); el.onpointermove = pick; };
+  el.onpointerup = el.onpointercancel = () => { el.onpointermove = null; renderPerform(); };
+})();
+
+function hsvToRgb(h, s, v) {
+  const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6];
+  return [r, g, b].map(x => Math.round(x * 255));
+}
+
+$("#pmaster").oninput = e => {
+  $("#pmasterv").textContent = e.target.value;
+  throttled("master", () => api("/api/master", { value: +e.target.value }));
+};
+$("#pblackout").onclick = () => api("/api/blackout", { on: !state.blackout });
+
+(function flash() {
+  const b = $("#flash");
+  let held = false;
+  const down = e => { e.preventDefault(); if (held) return; held = true; b.classList.add("on"); api("/api/flash", { on: true }); };
+  const up = () => { if (!held) return; held = false; b.classList.remove("on"); api("/api/flash", { on: false }); };
+  b.onpointerdown = e => { b.setPointerCapture(e.pointerId); down(e); };
+  b.onpointerup = b.onpointercancel = b.onlostpointercapture = up;
+  b.oncontextmenu = e => e.preventDefault();
+  window.addEventListener("blur", up);
+})();
+
+$("#scenesave").onclick = () => { sceneMode = sceneMode === "save" ? "" : "save"; renderPerform(); };
+$("#sceneclear").onclick = () => { sceneMode = sceneMode === "clear" ? "" : "clear"; renderPerform(); };
+
+let performSig = "";
+function renderPerform() {
+  const p = state.perform;
+  const sig = JSON.stringify([groups(), group, fadeSec, p, activePad, sceneMode, state.blackout]);
+  const m = $("#pmaster");
+  if (document.activeElement !== m || !dragging) { m.value = state.master; $("#pmasterv").textContent = state.master; }
+  if (sig === performSig) return;
+  performSig = sig;
+  if (group !== "all" && !groups().some(g => g[1] === group)) group = "all";
+  chips($("#groups"), groups(), group, v => { group = v; renderPerform(); });
+  chips($("#fades"), FADES, fadeSec, v => { fadeSec = +v; savePref("fade", fadeSec); renderPerform(); });
+  chips($("#strobe"), STROBES, p.strobe_hz, v => api("/api/strobe", { hz: +v }));
+  chips($("#rainbow"), RAINBOWS, p.rainbow_s, v => api("/api/rainbow", { seconds: +v }));
+  $$("#pads .pad").forEach(b => b.classList.toggle("on", b.dataset.pad === activePad && !p.rainbow_s));
+  const bo = $("#pblackout");
+  bo.classList.toggle("on", state.blackout);
+  bo.textContent = state.blackout ? "BLACKOUT ON" : "BLACKOUT";
+  $("#scenesave").classList.toggle("primary", sceneMode === "save");
+  $("#sceneclear").classList.toggle("danger", sceneMode === "clear");
+  $("#scenehint").textContent = sceneMode === "save" ? "Tap a slot to save the current look into it." : sceneMode === "clear" ? "Tap a scene to clear it." : `Tap a scene to fade to it (${fadeSec ? fadeSec + " s" : "snap"}).`;
+  $("#scenegrid").innerHTML = p.scenes.map(sc => `<button class="scene ${sc.saved ? "saved" : ""}" data-slot="${sc.slot}" style="${sc.color ? `--sc:${sc.color}` : ""}">
+    <i></i><span>${esc(sc.saved ? sc.name : "empty")}</span></button>`).join("");
+  $$("#scenegrid .scene").forEach(b => b.onclick = async () => {
+    const slot = +b.dataset.slot;
+    if (sceneMode === "save") { await api("/api/scene/save", { slot }); sceneMode = ""; renderPerform(); }
+    else if (sceneMode === "clear") { await api("/api/scene/clear", { slot }); sceneMode = ""; renderPerform(); }
+    else if (b.classList.contains("saved")) { activePad = ""; api("/api/scene/recall", { slot, fade: fadeSec }); }
+  });
 }
 
 // ---------- live ----------

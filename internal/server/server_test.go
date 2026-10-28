@@ -131,3 +131,25 @@ func TestRemotePIN(t *testing.T) {
 		t.Error("PIN must not be sent to other devices")
 	}
 }
+
+func TestPerformEndpoints(t *testing.T) {
+	c, _ := controller.New("", nopNet{})
+	h := New(c, Options{})
+	for _, tc := range []struct{ path, body string }{
+		{"/api/color", `{"fixtures":"all","r":255,"g":0,"b":0,"fade":0.5}`},
+		{"/api/flash", `{"on":true}`},
+		{"/api/flash", `{"on":false}`},
+		{"/api/strobe", `{"hz":5}`},
+		{"/api/rainbow", `{"seconds":10}`},
+		{"/api/scene/save", `{"slot":0,"name":"Red"}`},
+		{"/api/scene/recall", `{"slot":0,"fade":1}`},
+		{"/api/scene/clear", `{"slot":0}`},
+	} {
+		if code, out := do(t, h, "POST", tc.path, tc.body); code != 200 {
+			t.Errorf("%s %s: %d %v", tc.path, tc.body, code, out)
+		}
+	}
+	if code, _ := do(t, h, "POST", "/api/scene/recall", `{"slot":0}`); code != 400 {
+		t.Errorf("recall of cleared scene: %d", code)
+	}
+}
