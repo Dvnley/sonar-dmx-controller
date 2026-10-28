@@ -153,3 +153,30 @@ func TestPerformEndpoints(t *testing.T) {
 		t.Errorf("recall of cleared scene: %d", code)
 	}
 }
+
+func TestProgramEndpoints(t *testing.T) {
+	c, _ := controller.New("", nopNet{})
+	h := New(c, Options{})
+	for _, tc := range []struct{ path, body string }{
+		{"/api/program", `{"fixtures":[0,1,2],"program":"chase","speed":60,"size":50,"variation":2,"music":false}`},
+		{"/api/program", `{"fixtures":"all","program":"rainbow"}`},
+		{"/api/program/stop", `{"fixtures":[0]}`},
+		{"/api/program/stop", `{}`},
+		{"/api/group", `{"fixtures":[0,1],"brightness":50}`},
+		{"/api/position", `{"index":2,"x":0.2,"y":0.3}`},
+		{"/api/flash", `{"on":true,"fixtures":[6]}`},
+	} {
+		if code, out := do(t, h, "POST", tc.path, tc.body); code != 200 {
+			t.Errorf("%s %s: %d %v", tc.path, tc.body, code, out)
+		}
+	}
+	if code, _ := do(t, h, "POST", "/api/beat", `{"source":"tap"}`); code != 204 {
+		t.Errorf("beat: %d", code)
+	}
+	if code, out := do(t, h, "GET", "/api/programs", ""); code != 200 || len(out["programs"].([]any)) != 10 {
+		t.Errorf("programs: %d %v", code, out)
+	}
+	if code, _ := do(t, h, "POST", "/api/program", `{"program":"nope"}`); code != 400 {
+		t.Errorf("bad program: %d", code)
+	}
+}

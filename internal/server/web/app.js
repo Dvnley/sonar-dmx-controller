@@ -79,6 +79,7 @@ function render() {
   if (!state) return;
   renderBanners();
   renderPerform();
+  if (window.renderViews) renderViews();
   renderLive();
   if (tab === "patch") { if (!patchDraft) resetDraft(); renderPatchWarnings(); }
   renderSweep();
@@ -384,7 +385,7 @@ function updateCards() {
 
 // ---------- patch ----------
 function strip(f) {
-  return { name: f.name, profile: f.profile, mode: f.mode, universe: f.universe, address: f.address, enabled: f.enabled, brightness: f.brightness, channels: f.channels.map(c => ({ ...c })), values: [...f.values] };
+  return { name: f.name, profile: f.profile, mode: f.mode, universe: f.universe, address: f.address, enabled: f.enabled, brightness: f.brightness, channels: f.channels.map(c => ({ ...c })), values: [...f.values], pos: f.pos };
 }
 function resetDraft() { patchDraft = state.fixtures.map(strip); patchDirty = false; openMaps.clear(); renderPatch(); }
 function dirty() { patchDirty = true; renderPatchWarnings(); }
@@ -650,7 +651,7 @@ async function refreshDiag() {
 // ---------- boot ----------
 async function refreshState() {
   try { await api("/api/state"); } catch (_) { /* banner shown */ }
-  setTimeout(refreshState, state && (state.sweep || state.test_running) ? 250 : 1000);
+  setTimeout(refreshState, state && (state.sweep || state.test_running || (view === "stage" && state.perform.runs.length)) ? 250 : 1000);
 }
 
 (async function boot() {

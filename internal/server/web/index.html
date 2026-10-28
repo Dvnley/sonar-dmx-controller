@@ -31,22 +31,66 @@
 <!-- LIVE -->
 <section id="tab-perform" class="tab">
   <div class="pbar">
-    <div class="chips" id="groups"></div>
+    <div class="chips" id="views"><span class="chiplabel">Layout</span></div>
     <div class="chips" id="fades"><span class="chiplabel">Fade</span></div>
   </div>
-  <div class="pmain">
-    <div class="pads" id="pads"></div>
-    <div class="pside">
-      <div class="wheel" id="wheel" title="Tap or drag to pick any color"><div class="wdot"></div></div>
-      <label class="pmaster">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
+
+  <div id="view-groups" class="pview"><div class="gcols" id="gcols"></div></div>
+
+  <div id="view-desk" class="pview hidden"><div class="desk" id="desk"></div></div>
+
+  <div id="view-stage" class="pview hidden">
+    <div class="stagewrap">
+      <div class="stagecol">
+        <div class="chips" id="stagesel"><span class="chiplabel">Select</span></div>
+        <div class="stage" id="stage"><div class="stagelabel">STAGE</div></div>
+        <label class="check"><input type="checkbox" id="stagemove"> Move lights (drag them to where they are in the room)</label>
+      </div>
+      <div class="tray">
+        <b id="traytitle">Nothing selected</b>
+        <div class="tswatches" id="tswatches"></div>
+        <label class="pmaster">Level <input id="traylevel" type="range" min="0" max="100"><span id="traylevelv"></span>%</label>
+      </div>
     </div>
   </div>
-  <div class="pbar">
+
+  <div id="view-pads" class="pview hidden">
+    <div class="pbar"><div class="chips" id="groups"></div></div>
+    <div class="pmain">
+      <div class="pads" id="pads"></div>
+      <div class="pside">
+        <div class="wheel" id="wheel" title="Tap or drag to pick any color"><div class="wdot"></div></div>
+      </div>
+    </div>
+    <div class="pbar">
+      <div class="chips" id="strobe"><span class="chiplabel">Strobe</span></div>
+      <div class="chips" id="rainbow"><span class="chiplabel">Rainbow</span></div>
+    </div>
+  </div>
+
+  <div class="pbar showbar">
     <button id="flash" class="hit flash">FLASH<small>hold</small></button>
     <button id="pblackout" class="hit">BLACKOUT</button>
-    <div class="chips" id="strobe"><span class="chiplabel">Strobe</span></div>
-    <div class="chips" id="rainbow"><span class="chiplabel">Rainbow</span></div>
+    <label class="pmaster grow">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
   </div>
+
+  <div class="card" id="progcard">
+    <div class="fhead"><b>Programs</b><span class="meta" id="progtarget"></span><span class="grow"></span><button id="progstop">Stop</button><button id="progstopall" class="danger">Stop all</button></div>
+    <div class="proggrid" id="proggrid"></div>
+    <div class="progrow">
+      <label class="pmaster">Speed <input id="pspeed" type="range" min="0" max="100"><span id="pspeedv"></span></label>
+      <label class="pmaster">Size <input id="psize" type="range" min="0" max="100"><span id="psizev"></span></label>
+    </div>
+    <div class="chips" id="palettes"><span class="chiplabel">Variation</span></div>
+    <div class="music">
+      <label class="check"><input type="checkbox" id="pmusic"> Music mode (step on the beat)</label>
+      <span class="bpm" id="bpm">no beat</span>
+      <button id="tap" class="hit">TAP</button>
+      <button id="mic">Listen with this Mac's mic</button>
+      <span class="hint" id="michint"></span>
+    </div>
+  </div>
+
   <div class="card scenes">
     <div class="fhead"><b>Scenes</b><button id="scenesave">Save to…</button><button id="sceneclear">Clear…</button></div>
     <p class="hint" id="scenehint">Tap a scene to fade to it.</p>
@@ -177,5 +221,6 @@
 </main>
 
 <script src="app.js"></script>
+<script src="views.js"></script>
 </body>
 </html>

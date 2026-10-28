@@ -226,11 +226,11 @@ func TestAmberFallsBackToRGBOnWash(t *testing.T) {
 func TestFlashStrobeRainbow(t *testing.T) {
 	c, now := newTest(t)
 	c.SetBlackout(ptrb(true))
-	c.SetFlash(true)
+	c.SetFlash(true, nil)
 	if f := c.Frames()[0]; f[16] != 255 || f[4] != 255 {
 		t.Fatalf("flash should override blackout: wash r=%d uplight w=%d", f[16], f[4])
 	}
-	c.SetFlash(false)
+	c.SetFlash(false, nil)
 	c.SetBlackout(ptrb(false))
 	c.SetColor(nil, ColorSet{R: ptr(255), G: ptr(0), B: ptr(0)})
 	c.SetStrobe(2) // 4 half-periods per second

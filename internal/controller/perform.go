@@ -39,10 +39,13 @@ type SceneFixture struct {
 
 // PerformState is the perform part of GET /api/state.
 type PerformState struct {
-	Flash      bool        `json:"flash"`
-	StrobeHz   float64     `json:"strobe_hz"`
-	RainbowSec float64     `json:"rainbow_s"`
-	Scenes     []SceneInfo `json:"scenes"`
+	Flash      bool         `json:"flash"`
+	StrobeHz   float64      `json:"strobe_hz"`
+	RainbowSec float64      `json:"rainbow_s"`
+	Scenes     []SceneInfo  `json:"scenes"`
+	Runs       []ProgramRun `json:"runs"`
+	Beat       BeatState    `json:"beat"`
+	Live       []string     `json:"live"` // CSS color each fixture is showing right now, programs included
 }
 
 // SceneInfo describes a scene button.
@@ -111,12 +114,21 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 			fixtures[i] = f
 		}
 	}
+	c.applyPrograms(fixtures, now)
 	if !c.flashUntil.IsZero() {
 		if now.Before(c.flashUntil) {
-			fixtures = testLook(fixtures, "white")
-			return fixtures, fixture.Output{Master: 100}
+			if c.flashOnly == nil {
+				return testLook(fixtures, "white"), fixture.Output{Master: 100}
+			}
+			white := testLook(fixtures, "white")
+			for i := range fixtures {
+				if c.flashOnly[i] {
+					fixtures[i] = white[i]
+				}
+			}
+		} else {
+			c.flashUntil = time.Time{}
 		}
-		c.flashUntil = time.Time{}
 	}
 	if c.strobeHz > 0 {
 		phase := int(now.Sub(c.strobeStart).Seconds()*c.strobeHz*2) % 2
@@ -167,10 +179,18 @@ func hsv(h, s, v float64) (uint8, uint8, uint8) {
 	return uint8(math.Round(r * 255)), uint8(math.Round(g * 255)), uint8(math.Round(b * 255))
 }
 
-// SetFlash holds every color fixture at full white while on.
-func (c *Controller) SetFlash(on bool) {
+// SetFlash holds color fixtures at full white while on: all of them at
+// full master when targets is nil, else just those fixtures.
+func (c *Controller) SetFlash(on bool, targets []int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.flashOnly = nil
+	if targets != nil {
+		c.flashOnly = map[int]bool{}
+		for _, i := range targets {
+			c.flashOnly[i] = true
+		}
+	}
 	if on {
 		c.flashUntil = c.now().Add(flashTimeout)
 	} else {
@@ -243,6 +263,7 @@ func (c *Controller) RecallScene(slot int, fadeSec float64) error {
 	}
 	now := c.now()
 	c.rainbowSec = 0
+	c.runs = nil
 	for i, sf := range c.cfg.Scenes[slot].Fixtures {
 		if i >= len(c.cfg.Fixtures) {
 			break
@@ -260,7 +281,14 @@ func (c *Controller) RecallScene(slot int, fadeSec float64) error {
 }
 
 func (c *Controller) performState() PerformState {
-	ps := PerformState{Flash: !c.flashUntil.IsZero(), StrobeHz: c.strobeHz, RainbowSec: c.rainbowSec}
+	ps := PerformState{Flash: !c.flashUntil.IsZero(), StrobeHz: c.strobeHz, RainbowSec: c.rainbowSec,
+		Runs: []ProgramRun{}, Beat: c.beats.state(c.now())}
+	for _, r := range c.runs {
+		ps.Runs = append(ps.Runs, *r)
+	}
+	for _, f := range c.live {
+		ps.Live = append(ps.Live, previewCSS(f))
+	}
 	for slot := 0; slot < SceneSlots; slot++ {
 		info := SceneInfo{Slot: slot, Name: fmt.Sprintf("Scene %d", slot+1)}
 		if slot < len(c.cfg.Scenes) && len(c.cfg.Scenes[slot].Fixtures) > 0 {

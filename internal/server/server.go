@@ -145,12 +145,17 @@ func New(c *controller.Controller, opts Options) http.Handler {
 	// live performance
 	mux.HandleFunc("POST /api/flash", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			On bool `json:"on"`
+			On       bool            `json:"on"`
+			Fixtures json.RawMessage `json:"fixtures"`
 		}
-		if decode(w, r, &body) {
-			c.SetFlash(body.On)
-			reply(w, c.State())
+		if !decode(w, r, &body) {
+			return
 		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			c.SetFlash(body.On, targets)
+		}
+		result(w, c, err)
 	})
 	mux.HandleFunc("POST /api/strobe", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -192,6 +197,70 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			return
 		}
 		result(w, c, err)
+	})
+	mux.HandleFunc("GET /api/programs", func(w http.ResponseWriter, r *http.Request) {
+		reply(w, map[string]any{"programs": controller.Programs, "palettes": controller.Palettes})
+	})
+	mux.HandleFunc("POST /api/program", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			controller.ProgramRun
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StartProgram(targets, body.ProgramRun)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/program/stop", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StopProgram(targets)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/beat", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Source string `json:"source"`
+		}
+		if decode(w, r, &body) {
+			c.Beat(body.Source)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+	mux.HandleFunc("POST /api/group", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures   json.RawMessage `json:"fixtures"`
+			Brightness *int            `json:"brightness"`
+			Enabled    *bool           `json:"enabled"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.SetGroup(targets, body.Brightness, body.Enabled)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/position", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Index int     `json:"index"`
+			X     float64 `json:"x"`
+			Y     float64 `json:"y"`
+		}
+		if decode(w, r, &body) {
+			result(w, c, c.SetPosition(body.Index, body.X, body.Y))
+		}
 	})
 	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}

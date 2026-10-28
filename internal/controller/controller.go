@@ -76,6 +76,10 @@ type Controller struct {
 	rainbowSec   float64
 	rainbowStart time.Time
 	strobeStart  time.Time
+	flashOnly    map[int]bool // nil: flash everything
+	runs         []*ProgramRun
+	live         []fixture.Fixture // last look sent, for the UI
+	beats        BeatClock
 
 	Net       Sender
 	BoundPort bool
@@ -238,6 +242,7 @@ func (c *Controller) frames() map[int][]byte {
 		c.sweep = nil
 	}
 	fixtures, out := c.performLook(now)
+	c.live = fixtures
 	if phase := c.testPhase(now); phase >= 0 {
 		fixtures = testLook(fixtures, testColors[phase])
 		out = fixture.Output{Master: 100}
@@ -441,6 +446,7 @@ func (c *Controller) SetColor(targets []int, col ColorSet) error {
 	}
 	now := c.now()
 	c.rainbowSec = 0
+	c.removeFromRuns(idx)
 	full := col.R != nil && col.G != nil && col.B != nil
 	for _, i := range idx {
 		f := &c.cfg.Fixtures[i]
@@ -624,6 +630,7 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	defer c.mu.Unlock()
 	c.cfg.Fixtures = fixtures
 	c.fades = map[int]*fade{}
+	c.runs = nil
 	c.changed()
 	return nil
 }

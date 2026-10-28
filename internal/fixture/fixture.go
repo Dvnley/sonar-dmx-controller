@@ -145,6 +145,13 @@ type Fixture struct {
 	Brightness int       `json:"brightness"` // 0-100
 	Channels   []Channel `json:"channels"`
 	Values     Values    `json:"values"`
+	Pos        *Point    `json:"pos,omitempty"` // where it sits on the stage map
+}
+
+// Point is a position on the stage map, 0-1 across and down.
+type Point struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
 }
 
 // Values are a fixture's DMX values. They marshal as a JSON array of

@@ -82,14 +82,37 @@ channels.
 
 ## Pages
 
-- **Perform** (the default, built for the iPad): pick a group (all, the
-  uplights or the wash), then tap a color pad or the color wheel. The fade
-  chips set how long color changes and scene recalls take. **FLASH** holds
-  every color fixture at full white while your finger is down; **BLACKOUT**
-  toggles; strobe and rainbow run until you turn them off (tapping a color
-  stops the rainbow). Scenes: tap **Save to…** then a slot to store the
-  current look, tap a saved scene to fade to it. On the RGB-only wash, the
-  Amber, White, UV and Warm pads are mixed from red, green and blue.
+- **Perform** (the default, built for the iPad). Pick a layout at the top:
+  - **Groups**: a column per fixture type (uplights, wash, spot) with color
+    pads, a level fader, a FLASH button for just that group and a Programs
+    button. The spot column has a pan/tilt pad and a dimmer instead.
+  - **Desk**: vertical faders like a lighting console. One level fader and
+    Flash per group, R/G/B/A/W/UV faders for the group picked with **Sel**,
+    program speed, and master with blackout.
+  - **Stage**: a map of the room. Tap lights (or All / a group) to select
+    them, then tap a color, set the level or start a program for just those.
+    Tick **Move lights** and drag them to where they really are; positions
+    are saved with the patch. Running programs show live on the map.
+  - **Pads**: the original big color pads, color wheel, strobe and rainbow.
+
+  Under every layout: **FLASH** (hold for full white), **BLACKOUT** and
+  master, then **Programs**: Chase, Color jump, Color fade, Rainbow, Wave,
+  Pulse, Strobe pop, Police, Fire and Sparkle. Tap one to start it on the
+  lights shown next to the title. **Speed** runs from 30 to 240 BPM,
+  **Size** goes from all lights together to spread across them, and
+  **Variation** picks the colors (Rainbow, Warm, Cool, Party, Red/Blue,
+  Pink/Purple). Tapping a color on a light takes it out of its program.
+
+  **Music mode** makes programs step on the beat; Speed then picks ¼ to 4
+  steps per beat. Tap **TAP** along with the music (4 taps sets the tempo),
+  or press **Listen with this Mac's mic** in the browser on the Mac to
+  follow the kick drum. The mic only works on the Mac (browsers block it on
+  the iPad over Wi-Fi), so on the iPad use TAP.
+
+  The fade chips set how long color changes and scene recalls take. Scenes:
+  tap **Save to…** then a slot to store the current look, tap a saved scene
+  to fade to it (this stops programs). On the RGB-only wash, the Amber,
+  White, UV and Warm pads are mixed from red, green and blue.
 - **Fixtures**: master, blackout, RGBW test, color presets and mixer for all (or
   ticked) color fixtures, and a card per fixture with brightness and a fader
   per channel. Moving heads get a pan/tilt pad plus Center, Light on/off and
@@ -145,6 +168,13 @@ New in v0.3:
 | `POST /api/strobe` | `{"hz": 5}`, 0 stops |
 | `POST /api/rainbow` | `{"seconds": 10}` per cycle, 0 stops |
 | `POST /api/scene/save`, `/recall`, `/clear` | `{"slot": 0-7, "name", "fade"}` |
+| `POST /api/flash` | also takes `"fixtures": [i]` to flash only those |
+| `GET /api/programs` | The program and variation catalog |
+| `POST /api/program` | `{"fixtures": "all" \| [i], "program": "chase", "speed": 0-100, "size": 0-100, "variation": 0-5, "music": false}` |
+| `POST /api/program/stop` | `{"fixtures": [i]}`, or `{}` to stop everything |
+| `POST /api/beat` | `{"source": "tap" \| "mic"}`: one beat, returns 204 |
+| `POST /api/group` | `{"fixtures": [i], "brightness": 0-100, "enabled": true}`, either field optional |
+| `POST /api/position` | `{"index", "x", "y"}`: stage map position, 0-1 |
 
 Example: `curl -s -X POST localhost:8080/api/color -d '{"fixtures":"all","r":255}'`
 
