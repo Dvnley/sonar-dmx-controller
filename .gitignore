@@ -2,3 +2,6 @@
 /sonar-dmx
 *.test
 .DS_Store
+/ios/Sonar.xcframework/
+/ios/build/
+xcuserdata/

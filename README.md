@@ -57,6 +57,12 @@ Other devices without it see only the PIN page. The Mac itself never needs
 the PIN. If the iPad can't connect, check that macOS allowed incoming
 connections for the app (System Settings, Network, Firewall).
 
+## iPad app (no Mac needed)
+
+There is also a standalone iPad app that sends the Art-Net from the iPad
+itself, over a USB-C Ethernet adapter or Wi-Fi. See [ios/README.md](ios/README.md)
+for installing it with Xcode and connecting the AN2.
+
 ## The rig (default patch)
 
 | Fixture | Profile | Mode | Universe | Address |
