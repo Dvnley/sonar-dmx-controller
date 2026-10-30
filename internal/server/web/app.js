@@ -2,6 +2,9 @@
 
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+// The standalone iPad app adds this to its web view's user agent.
+const inApp = /SonarDMXiPad/.test(navigator.userAgent);
+const here = inApp ? "iPad" : "Mac";
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 let state = null;
@@ -610,10 +613,12 @@ function renderDiag() {
   if (!diag) { pill.className = "pill bad"; pill.textContent = "app not responding"; return; }
   if (diag.an2_online) { pill.className = "pill ok"; pill.textContent = `AN2 online (${diag.target})`; }
   else if (diag.artnet_ip_ok) { pill.className = "pill mid"; pill.textContent = `On ${diag.interface_network}, ${diag.target} not answering`; }
-  else { pill.className = "pill bad"; pill.textContent = `No network for ${diag.target}: set USB Ethernet to 2.0.0.2 / 255.0.0.0`; }
+  else { pill.className = "pill bad"; pill.textContent = inApp
+    ? `No network for ${diag.target}: set the iPad's Ethernet to 2.0.0.2 / 255.0.0.0`
+    : `No network for ${diag.target}: set USB Ethernet to 2.0.0.2 / 255.0.0.0`; }
   const rows = [
     ["Node online (ArtPoll)", diag.an2_online ? "yes" : "no"],
-    ["Mac on node's subnet", diag.artnet_ip_ok ? `yes (${diag.interface_network})` : "no"],
+    [`${here} on node's subnet`, diag.artnet_ip_ok ? `yes (${diag.interface_network})` : "no"],
     ["Local IPs", diag.local_ips.join(", ") || "none"],
     ["Target", diag.target],
     ["Listening on UDP 6454", diag.bound_port_6454 ? "yes" : "no (another Art-Net app is open?)"],
@@ -630,6 +635,11 @@ async function refreshRemote() {
   let r;
   try { r = await (await fetch("/api/remote")).json(); } catch (_) { return; }
   const el = $("#remote");
+  if (inApp) {
+    $("#remotecard h2").textContent = "iPad app";
+    el.innerHTML = `<p class="hint">This is the iPad app: the iPad sends the Art-Net itself, no Mac needed. Plug the AN2 into a USB-C Ethernet adapter and set it to 2.0.0.2 / 255.0.0.0 in Settings, Ethernet. Quit the Mac app while this one runs.</p>`;
+    return;
+  }
   if (!r.enabled) {
     el.innerHTML = `<p class="hint">Off. To control the rig from an iPad, quit the app and start it with <b>START-WITH-IPAD.command</b>. The iPad and this Mac need to be on the same Wi-Fi.</p>`;
     return;

@@ -416,8 +416,9 @@ if (!micOK) {
   $("#mic").disabled = true;
   $("#michint").textContent = "Mic listening only works in the browser on the Mac itself. Use TAP here.";
 }
+$("#mic").textContent = `Listen with this ${here}'s mic`;
 $("#mic").onclick = async () => {
-  if (mic) { mic.stop(); mic = null; $("#mic").textContent = "Listen with this Mac's mic"; $("#mic").classList.remove("primary"); return; }
+  if (mic) { mic.stop(); mic = null; $("#mic").textContent = `Listen with this ${here}'s mic`; $("#mic").classList.remove("primary"); return; }
   try {
     mic = await startMic();
     $("#mic").textContent = "Stop listening";

@@ -24,3 +24,24 @@ jobs:
         with:
           name: Sonar_DMX_Controller_v0.3
           path: dist/Sonar_DMX_Controller_v0.3
+
+  ipad:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build Sonar.xcframework
+        run: ./ios/build-framework.sh
+      - name: Build the app (unsigned)
+        run: |
+          xcodebuild -project ios/SonarDMX.xcodeproj -scheme SonarDMX -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath ios/build \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package the iPad kit
+        run: ./scripts/package-ipad.sh ios/build/Build/Products/Release-iphoneos
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Sonar_DMX_iPad_v0.3
+          path: dist/Sonar_DMX_iPad_v0.3
