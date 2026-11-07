@@ -13,26 +13,40 @@ import (
 type ChannelType string
 
 const (
-	Red     ChannelType = "red"
-	Green   ChannelType = "green"
-	Blue    ChannelType = "blue"
-	Amber   ChannelType = "amber"
-	White   ChannelType = "white"
-	UV      ChannelType = "uv"
-	Dimmer  ChannelType = "dimmer"
-	Pan     ChannelType = "pan"
-	Tilt    ChannelType = "tilt"
-	Shutter ChannelType = "shutter" // shutter / strobe
-	Color   ChannelType = "color"   // color wheel
-	Gobo    ChannelType = "gobo"
-	Speed   ChannelType = "speed" // pan/tilt speed
-	Auto    ChannelType = "auto"  // auto / sound programs
-	Reset   ChannelType = "reset"
-	Generic ChannelType = "generic"
+	Red      ChannelType = "red"
+	Green    ChannelType = "green"
+	Blue     ChannelType = "blue"
+	Amber    ChannelType = "amber"
+	White    ChannelType = "white"
+	UV       ChannelType = "uv"
+	Dimmer   ChannelType = "dimmer"
+	Pan      ChannelType = "pan"
+	Tilt     ChannelType = "tilt"
+	PanFine  ChannelType = "pan_fine"
+	TiltFine ChannelType = "tilt_fine"
+	Prism    ChannelType = "prism"
+	Focus    ChannelType = "focus"
+	Shutter  ChannelType = "shutter" // shutter / strobe
+	Color    ChannelType = "color"   // color wheel
+	Gobo     ChannelType = "gobo"
+	Speed    ChannelType = "speed" // pan/tilt speed
+	Auto     ChannelType = "auto"  // auto / sound programs
+	Reset    ChannelType = "reset"
+	Generic  ChannelType = "generic"
 )
 
 // ChannelTypes lists every type, in the order the patch editor offers them.
-var ChannelTypes = []ChannelType{Red, Green, Blue, Amber, White, UV, Dimmer, Pan, Tilt, Shutter, Color, Gobo, Speed, Auto, Reset, Generic}
+var ChannelTypes = []ChannelType{Red, Green, Blue, Amber, White, UV, Dimmer, Pan, PanFine, Tilt, TiltFine, Shutter, Color, Gobo, Prism, Focus, Speed, Auto, Reset, Generic}
+
+// Known reports whether t is one of ChannelTypes.
+func (t ChannelType) Known() bool {
+	for _, k := range ChannelTypes {
+		if k == t {
+			return true
+		}
+	}
+	return false
+}
 
 // IsColor reports whether t is an LED color emitter channel.
 func (t ChannelType) IsColor() bool {
@@ -48,6 +62,15 @@ type Channel struct {
 	Name    string      `json:"name"`
 	Type    ChannelType `json:"type"`
 	Default uint8       `json:"default"`
+	// Stops are named values shown as buttons under the slider, such as
+	// the colors of a color wheel or the gobos of a gobo wheel.
+	Stops []Stop `json:"stops,omitempty"`
+}
+
+// Stop is one named value of a channel.
+type Stop struct {
+	Name  string `json:"name"`
+	Value uint8  `json:"value"`
 }
 
 // Mode is one DMX personality of a profile.
@@ -63,6 +86,9 @@ type Profile struct {
 	Kind  string `json:"kind"` // "color" or "moving"
 	Notes string `json:"notes,omitempty"`
 	Modes []Mode `json:"modes"`
+	// Custom marks a preset the user made in the app. It is saved in the
+	// config, can be edited and deleted, and is listed after the built-ins.
+	Custom bool `json:"custom,omitempty"`
 }
 
 func ch(name string, t ChannelType, def uint8) Channel {
@@ -114,14 +140,128 @@ var Profiles = []Profile{
 	},
 }
 
-// FindProfile looks up a profile by ID.
-func FindProfile(id string) (Profile, bool) {
-	for _, p := range Profiles {
+// FindProfile looks up a built-in profile by ID.
+func FindProfile(id string) (Profile, bool) { return FindIn(Profiles, id) }
+
+// FindIn looks up a profile by ID in list.
+func FindIn(list []Profile, id string) (Profile, bool) {
+	for _, p := range list {
 		if p.ID == id {
 			return p, true
 		}
 	}
 	return Profile{}, false
+}
+
+// KindOf says "moving" for a channel map with pan or tilt, else "color".
+func KindOf(chs []Channel) string {
+	for _, c := range chs {
+		if c.Type == Pan || c.Type == Tilt {
+			return "moving"
+		}
+	}
+	return "color"
+}
+
+// Clean tidies a user-made profile: trims names, fills blanks, turns unknown
+// channel types into generic and sets Kind. It fails if nothing is usable.
+func (p *Profile) Clean() error {
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Name == "" {
+		return fmt.Errorf("give the preset a name")
+	}
+	if len(p.Modes) == 0 {
+		return fmt.Errorf("%s: has no channels", p.Name)
+	}
+	seen := map[string]bool{}
+	for mi := range p.Modes {
+		m := &p.Modes[mi]
+		if len(m.Channels) == 0 {
+			return fmt.Errorf("%s: has no channels", p.Name)
+		}
+		if len(m.Channels) > 512 {
+			return fmt.Errorf("%s: more than 512 channels", p.Name)
+		}
+		m.Name = strings.TrimSpace(m.Name)
+		if m.Name == "" {
+			m.Name = fmt.Sprintf("%dCH", len(m.Channels))
+		}
+		if seen[strings.ToLower(m.Name)] {
+			return fmt.Errorf("%s: two modes are called %s", p.Name, m.Name)
+		}
+		seen[strings.ToLower(m.Name)] = true
+		for ci := range m.Channels {
+			c := &m.Channels[ci]
+			c.Name = strings.TrimSpace(c.Name)
+			c.Type = ChannelType(strings.ToLower(strings.TrimSpace(string(c.Type))))
+			if !c.Type.Known() {
+				c.Type = Generic
+			}
+			if c.Name == "" {
+				c.Name = fmt.Sprintf("Ch %d", ci+1)
+			}
+			stops := c.Stops[:0]
+			for _, st := range c.Stops {
+				st.Name = strings.TrimSpace(st.Name)
+				if st.Name != "" {
+					stops = append(stops, st)
+				}
+			}
+			c.Stops = stops
+			if len(c.Stops) == 0 {
+				c.Stops = nil
+			}
+		}
+	}
+	p.Kind = KindOf(p.Modes[0].Channels)
+	return nil
+}
+
+// Slug turns a name into an ID fragment: "My Spot 9CH" -> "my-spot-9ch".
+func Slug(name string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(name) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	return strings.TrimSuffix(b.String(), "-")
+}
+
+// Remap gives the fixture a new channel map. Values carry over by channel
+// type (the second "generic" goes to the second "generic", and so on), and
+// new channels start at their default.
+func (f *Fixture) Remap(chs []Channel) {
+	old := map[ChannelType][]uint8{}
+	for i, c := range f.Channels {
+		if i < len(f.Values) {
+			old[c.Type] = append(old[c.Type], f.Values[i])
+		}
+	}
+	f.Channels = CopyChannels(chs)
+	f.Values = make(Values, len(chs))
+	for i, c := range chs {
+		if q := old[c.Type]; len(q) > 0 && c.Type != Reset {
+			f.Values[i], old[c.Type] = q[0], q[1:]
+		} else {
+			f.Values[i] = c.Default
+		}
+	}
+}
+
+// CopyChannels deep-copies a channel map, stops included.
+func CopyChannels(chs []Channel) []Channel {
+	out := make([]Channel, len(chs))
+	for i, c := range chs {
+		c.Stops = append([]Stop(nil), c.Stops...)
+		out[i] = c
+	}
+	return out
 }
 
 // FindMode looks up a mode of a profile by name, defaulting to the first.
@@ -188,7 +328,7 @@ func New(name, profileID, mode string, universe, address int) (Fixture, error) {
 	f := Fixture{
 		Name: name, Profile: p.ID, Mode: m.Name, Universe: universe, Address: address,
 		Enabled: true, Brightness: 100,
-		Channels: append([]Channel(nil), m.Channels...),
+		Channels: CopyChannels(m.Channels),
 	}
 	f.Normalize()
 	return f, nil

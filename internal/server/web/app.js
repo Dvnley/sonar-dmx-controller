@@ -74,6 +74,7 @@ $$("nav button").forEach(b => b.onclick = () => {
   $$("nav button").forEach(x => x.classList.toggle("active", x === b));
   $$(".tab").forEach(s => s.classList.toggle("hidden", s.id !== "tab-" + tab));
   if (tab === "patch" && !patchDirty) resetDraft();
+  if (tab === "presets" && window.openPresets) openPresets();
   render();
 });
 
@@ -87,6 +88,7 @@ function render() {
   if (tab === "patch") { if (!patchDraft) resetDraft(); renderPatchWarnings(); }
   renderSweep();
   renderSetup();
+  if (tab === "presets" && window.renderPresets) renderPresets();
 }
 
 let conflictHTML = "";
@@ -308,7 +310,7 @@ function buildCards() {
       <div class="chans">${fader("Brightness %", f.brightness, { max: 100, data: 'data-bright' })}</div>
       ${moving ? `<div class="xywrap"><div class="xy" title="Drag to aim (pan / tilt)"><div class="dot"></div></div>
         <div class="xybtns"><button data-act="center">Center</button><button data-act="open">Light on</button><button data-act="dark">Light off</button><button data-act="reset">Reset values</button></div></div>` : ""}
-      <div class="chans">${f.channels.map((c, j) => fader(`${j + 1}. ${c.name}`, f.values[j], { data: `data-ch="${j + 1}"` })).join("")}</div>
+      <div class="chans">${f.channels.map((c, j) => `<div>${fader(`${j + 1}. ${c.name}`, f.values[j], { data: `data-ch="${j + 1}"` })}${c.stops?.length ? `<div class="stops">${c.stops.map(s => `<button data-stop="${j + 1}" data-v="${s.value}" title="${s.value}">${esc(s.name)}</button>`).join("")}</div>` : ""}</div>`).join("")}</div>
       ${!moving ? `<div class="row"><button data-act="reset">Reset values</button></div>` : ""}
     </div>`;
   }).join("");
@@ -326,6 +328,7 @@ function buildCards() {
       inp.nextElementSibling.textContent = inp.value;
       throttled(`c${i}.${inp.dataset.ch}`, () => api("/api/fixture", { index: i, values: { [inp.dataset.ch]: +inp.value } }));
     });
+    $$("[data-stop]", card).forEach(b => b.onclick = () => api("/api/fixture", { index: i, values: { [b.dataset.stop]: +b.dataset.v } }));
     $$("[data-act]", card).forEach(b => b.onclick = () => cardAction(i, b.dataset.act));
     const xy = $(".xy", card);
     if (xy) {
@@ -378,6 +381,7 @@ function updateCards() {
     const setRange = (inp, v) => { if (document.activeElement !== inp || !dragging) { inp.value = v; inp.nextElementSibling.textContent = v; } };
     setRange($("[data-bright]", card), f.brightness);
     $$("[data-ch]", card).forEach(inp => setRange(inp, f.values[+inp.dataset.ch - 1]));
+    $$("[data-stop]", card).forEach(b => b.classList.toggle("on", f.values[+b.dataset.stop - 1] === +b.dataset.v));
     const xy = $(".xy", card);
     if (xy && !xy.onpointermove) {
       const p = chIndex(f, "pan"), t = chIndex(f, "tilt");

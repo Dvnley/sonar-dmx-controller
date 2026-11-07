@@ -31,6 +31,8 @@ type Config struct {
 	// iPad). It is made once and kept so the iPad stays signed in.
 	RemotePIN string  `json:"remote_pin,omitempty"`
 	Scenes    []Scene `json:"scenes,omitempty"`
+	// CustomProfiles are fixture presets made in the app.
+	CustomProfiles []fixture.Profile `json:"custom_profiles,omitempty"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
@@ -350,8 +352,9 @@ func (c *Controller) State() State {
 		f.Values = append(fixture.Values(nil), f.Values...)
 		f.Channels = append([]fixture.Channel(nil), f.Channels...)
 		v := FixtureView{Index: i, End: f.End(), Fixture: f, Kind: "color", ProfileName: f.Profile}
-		if p, ok := fixture.FindProfile(f.Profile); ok {
-			v.Kind, v.ProfileName = p.Kind, p.Name
+		v.Kind = fixture.KindOf(f.Channels)
+		if p, ok := c.findProfile(f.Profile); ok {
+			v.ProfileName = p.Name
 		}
 		s.Fixtures = append(s.Fixtures, v)
 		if f.Profile == UplightProfile {
@@ -603,18 +606,19 @@ func (c *Controller) UpdateConfig(u ConfigUpdate) error {
 // SetPatch replaces the whole patch. Overlaps are allowed (and reported in
 // the state); fixtures that run past channel 512 are rejected.
 func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
+	profiles := c.Profiles()
 	for i := range fixtures {
 		f := &fixtures[i]
 		if strings.TrimSpace(f.Name) == "" {
 			f.Name = fmt.Sprintf("Fixture %d", i+1)
 		}
 		if len(f.Channels) == 0 {
-			p, ok := fixture.FindProfile(f.Profile)
+			p, ok := fixture.FindIn(profiles, f.Profile)
 			if !ok {
 				return fmt.Errorf("%s: unknown profile %q and no channels", f.Name, f.Profile)
 			}
 			m := fixture.FindMode(p, f.Mode)
-			f.Mode, f.Channels = m.Name, append([]fixture.Channel(nil), m.Channels...)
+			f.Mode, f.Channels = m.Name, fixture.CopyChannels(m.Channels)
 		}
 		for j := range f.Channels {
 			if f.Channels[j].Type == "" {
@@ -695,4 +699,103 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// Profiles lists the built-in fixture profiles followed by the custom ones.
+func (c *Controller) Profiles() []fixture.Profile {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := append([]fixture.Profile(nil), fixture.Profiles...)
+	return append(out, c.cfg.CustomProfiles...)
+}
+
+func (c *Controller) findProfile(id string) (fixture.Profile, bool) {
+	if p, ok := fixture.FindProfile(id); ok {
+		return p, true
+	}
+	return fixture.FindIn(c.cfg.CustomProfiles, id)
+}
+
+// SaveProfile adds or replaces a custom fixture preset and returns it as
+// saved. A preset with no ID gets one from its name. Every fixture already
+// using the preset is updated to the new channel map, and so are the
+// fixtures listed in apply.
+func (c *Controller) SaveProfile(p fixture.Profile, apply []int) (fixture.Profile, error) {
+	if err := p.Clean(); err != nil {
+		return p, err
+	}
+	p.Custom = true
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, i := range apply {
+		if i < 0 || i >= len(c.cfg.Fixtures) {
+			return p, fmt.Errorf("no fixture %d", i)
+		}
+	}
+	if _, builtin := fixture.FindProfile(p.ID); builtin {
+		return p, fmt.Errorf("%s is built in and can't be changed; save it as a new preset instead", p.ID)
+	}
+	if p.ID == "" {
+		base := "custom-" + fixture.Slug(p.Name)
+		if base == "custom-" {
+			base = "custom"
+		}
+		p.ID = base
+		for n := 2; ; n++ {
+			if _, taken := c.findProfile(p.ID); !taken {
+				break
+			}
+			p.ID = fmt.Sprintf("%s-%d", base, n)
+		}
+	}
+	replaced := false
+	for i := range c.cfg.CustomProfiles {
+		if c.cfg.CustomProfiles[i].ID == p.ID {
+			c.cfg.CustomProfiles[i], replaced = p, true
+		}
+	}
+	if !replaced {
+		c.cfg.CustomProfiles = append(c.cfg.CustomProfiles, p)
+	}
+	targets := map[int]bool{}
+	for _, i := range apply {
+		targets[i] = true
+	}
+	for i, f := range c.cfg.Fixtures {
+		if f.Profile == p.ID {
+			targets[i] = true
+		}
+	}
+	for i := range targets {
+		f := &c.cfg.Fixtures[i]
+		mode := f.Mode
+		if f.Profile != p.ID {
+			mode = ""
+		}
+		m := fixture.FindMode(p, mode)
+		f.Profile, f.Mode = p.ID, m.Name
+		f.Remap(m.Channels)
+		f.Normalize()
+		delete(c.fades, i)
+	}
+	c.changed()
+	return p, nil
+}
+
+// DeleteProfile removes a custom preset. Fixtures using it keep their
+// channel map.
+func (c *Controller) DeleteProfile(id string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for i, p := range c.cfg.CustomProfiles {
+		if p.ID == id {
+			c.cfg.CustomProfiles = append(c.cfg.CustomProfiles[:i], c.cfg.CustomProfiles[i+1:]...)
+			c.changed()
+			return nil
+		}
+	}
+	if _, ok := fixture.FindProfile(id); ok {
+		return fmt.Errorf("%s is built in and can't be deleted", id)
+	}
+	return fmt.Errorf("no preset %q", id)
 }

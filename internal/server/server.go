@@ -83,7 +83,35 @@ func New(c *controller.Controller, opts Options) http.Handler {
 	})
 
 	// new in this rebuild
-	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) { reply(w, fixture.Profiles) })
+	mux.HandleFunc("GET /api/profiles", func(w http.ResponseWriter, r *http.Request) { reply(w, c.Profiles()) })
+	mux.HandleFunc("POST /api/profile", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Profile fixture.Profile `json:"profile"`
+			Apply   []int           `json:"apply"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		p, err := c.SaveProfile(body.Profile, body.Apply)
+		if err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		reply(w, map[string]any{"profile": p, "profiles": c.Profiles(), "state": c.State()})
+	})
+	mux.HandleFunc("POST /api/profile/delete", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ID string `json:"id"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		if err := c.DeleteProfile(body.ID); err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		reply(w, map[string]any{"profiles": c.Profiles(), "state": c.State()})
+	})
 	mux.HandleFunc("POST /api/patch", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Fixtures []fixture.Fixture `json:"fixtures"`
