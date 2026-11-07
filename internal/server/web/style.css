@@ -204,3 +204,18 @@ header { padding-top: max(10px, env(safe-area-inset-top)); }
   .cards { grid-template-columns: 1fr; }
   dl { grid-template-columns: 1fr; }
 }
+
+/* fixture presets */
+.presetwrap { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 14px; align-items: start; }
+.presetwrap > .card { margin: 0; }
+@media (max-width: 820px) { .presetwrap { grid-template-columns: 1fr; } }
+.plist { display: flex; flex-direction: column; gap: 4px; }
+.plist button { text-align: left; display: flex; justify-content: space-between; gap: 8px; }
+.plist button.active { border-color: var(--accent); background: rgba(79,140,255,.15); }
+.plist button small { color: var(--dim); }
+#pr-chs td input[data-c="stops"] { min-width: 180px; }
+#pr-chs select { min-width: 110px; }
+.applylist { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.stops { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px 102px; }
+.stops button { padding: 2px 8px; font-size: 11px; }
+.stops button.on { background: var(--accent); border-color: var(--accent); color: #fff; }

@@ -180,3 +180,31 @@ func TestProgramEndpoints(t *testing.T) {
 		t.Errorf("bad program: %d", code)
 	}
 }
+
+func TestProfileEndpoints(t *testing.T) {
+	c, _ := controller.New("", nopNet{})
+	h := New(c, Options{})
+	code, out := do(t, h, "POST", "/api/profile", `{"profile":{"name":"Test Spot","modes":[{"name":"2CH","channels":[{"name":"Pan","type":"pan"},{"name":"Dim","type":"dimmer"}]}]},"apply":[7]}`)
+	if code != 200 {
+		t.Fatalf("save: %d %v", code, out)
+	}
+	if out["profile"].(map[string]any)["id"] != "custom-test-spot" {
+		t.Fatalf("save: %v", out["profile"])
+	}
+	fx := out["state"].(map[string]any)["fixtures"].([]any)[7].(map[string]any)
+	if fx["profile"] != "custom-test-spot" || len(fx["channels"].([]any)) != 2 {
+		t.Fatalf("apply: %v", fx)
+	}
+	req := httptest.NewRequest("GET", "/api/profiles", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if !strings.Contains(rec.Body.String(), `"custom-test-spot"`) {
+		t.Fatal("not listed")
+	}
+	if code, _ := do(t, h, "POST", "/api/profile/delete", `{"id":"custom-test-spot"}`); code != 200 {
+		t.Fatal("delete failed")
+	}
+	if code, _ := do(t, h, "POST", "/api/profile/delete", `{"id":"wash-fx"}`); code != 400 {
+		t.Fatal("deleted a built-in")
+	}
+}

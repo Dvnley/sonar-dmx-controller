@@ -83,8 +83,8 @@ blue). The spot's channel layout is a guess for a common cheap 9CH head:
 7 Pan/tilt speed · 8 Auto/sound · 9 Reset
 
 There is a second mode with dimmer and shutter swapped. If neither matches,
-open the spot's channel map in the Patch tab and rename or retype the
-channels.
+make your own sliders in the **Fixture presets** tab (see below) and apply
+them to the spots.
 
 ## Pages
 
@@ -127,6 +127,16 @@ channels.
   editable channel map (name, type, default value), a **Free** button that
   moves a fixture to the first free address, overlap warnings and a DMX map.
   Nothing changes until you press **Save patch**.
+- **Fixture presets**: make your own sliders for a fixture model. Open a
+  built-in profile (or **Start from this fixture**, or **New preset**), then
+  set each DMX channel's slider name, type (pan, tilt, dimmer, color wheel,
+  gobo, prism, focus, shutter, speed, auto, reset, generic and so on), the
+  value it starts at, and optional buttons such as
+  `White=0, Red=14, Blue=28` that appear under the slider on the Fixtures
+  tab. Tick the fixtures that should use it and press **Save preset**.
+  Presets are saved in the config, show up in the Patch tab's profile list,
+  and editing one updates every fixture that uses it. Built-in profiles
+  can't be changed, only copied.
 - **Channel sweep**: the old `artnet.py` probe, built in. It takes over the
   output while it runs (everything not listed is 0), so you never need to stop
   the app to probe. Use **Manual** to step with Next/Prev and type what each
@@ -163,7 +173,9 @@ New in v0.3:
 | --- | --- |
 | `POST /api/fixture` | `{"index", "values": {"pan": 128, "6": 255, "Gobo": 40}}`: a channel by type, 1-based number or name |
 | `POST /api/fixture/reset` | `{"index"}`: back to channel defaults |
-| `GET /api/profiles` | Built-in fixture profiles |
+| `GET /api/profiles` | Built-in fixture profiles, then your custom presets (`"custom": true`) |
+| `POST /api/profile` | `{"profile": {"id", "name", "notes", "modes": [{"name", "channels": [{"name", "type", "default", "stops": [{"name", "value"}]}]}]}, "apply": [i]}`: save a custom preset (no `id` = new) and switch fixtures `i` to it |
+| `POST /api/profile/delete` | `{"id"}`: delete a custom preset; fixtures keep their channels |
 | `POST /api/patch` | `{"fixtures": [...]}`: replace the patch |
 | `POST /api/sweep` | `{"universe", "plan": {"from", "to", "value", "hold", "gap", "base", "manual"}}` or `{"universe", "script", "manual"}` |
 | `POST /api/sweep/step` | `{"delta": 1}` or `-1` for a manual sweep |

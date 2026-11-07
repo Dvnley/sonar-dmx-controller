@@ -18,6 +18,7 @@
     <button data-tab="perform" class="active">Perform</button>
     <button data-tab="live">Fixtures</button>
     <button data-tab="patch">Patch</button>
+    <button data-tab="presets">Fixture presets</button>
     <button data-tab="sweep">Channel sweep</button>
     <button data-tab="setup">Setup</button>
   </nav>
@@ -149,6 +150,49 @@
   </div>
 </section>
 
+<!-- FIXTURE PRESETS -->
+<section id="tab-presets" class="tab hidden">
+  <div class="presetwrap">
+    <div class="card presetlist">
+      <h2>Fixture presets</h2>
+      <p class="hint">A preset is a fixture's set of sliders: one per DMX channel, in order, each with a name and a type. Make one for a light whose sliders are wrong, then apply it to every fixture of that model.</p>
+      <div class="row"><button id="pr-new" class="primary">New preset</button></div>
+      <div class="row"><select id="pr-fromfix"></select><button id="pr-copyfix">Start from this fixture</button></div>
+      <h3>Your presets</h3>
+      <div id="pr-mine" class="plist"></div>
+      <h3>Built in <small>(open one to save your own copy)</small></h3>
+      <div id="pr-builtin" class="plist"></div>
+    </div>
+    <div class="card presetedit">
+      <div id="pr-empty" class="hint">Pick a preset on the left, or start a new one.</div>
+      <div id="pr-editor" class="hidden">
+        <h2 id="pr-title">New preset</h2>
+        <div class="form">
+          <label class="wide">Name <input id="pr-name" placeholder="e.g. My 9CH spot"></label>
+          <label>Mode <input id="pr-mode" placeholder="9CH"></label>
+          <label class="wide">Notes <input id="pr-notes" placeholder="optional, e.g. set the light's menu to 9CH"></label>
+        </div>
+        <p class="hint">Channel 1 is the light's start address. <b>Type</b> tells the app what a slider does: pan and tilt drive the aim pad, dimmer follows the master and the Light on/off buttons, and so on; use <b>generic</b> if none fits. <b>Buttons</b> are optional named values shown under the slider, written as <code>Name=value</code>, for example <code>White=0, Red=14, Blue=28</code> for a color wheel.</p>
+        <div class="scroll"><table class="chmap" id="pr-chs">
+          <thead><tr><th>#</th><th>Slider name</th><th>Type</th><th>Start at</th><th>Buttons</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="row"><button id="pr-addch">Add channel</button><span class="hint" id="pr-count"></span></div>
+        <h3>Use it on</h3>
+        <div id="pr-apply" class="applylist"></div>
+        <p class="hint">Ticked fixtures switch to these sliders when you save. Fixtures already using this preset always update. Their address does not change.</p>
+        <div class="row">
+          <button id="pr-save" class="primary">Save preset</button>
+          <button id="pr-saveas">Save as new preset</button>
+          <span class="grow"></span>
+          <button id="pr-delete" class="danger">Delete</button>
+        </div>
+        <div id="pr-msg" class="hint"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- SWEEP -->
 <section id="tab-sweep" class="tab hidden">
   <div class="card">
@@ -222,5 +266,6 @@
 
 <script src="app.js"></script>
 <script src="views.js"></script>
+<script src="presets.js"></script>
 </body>
 </html>
