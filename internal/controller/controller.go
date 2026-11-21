@@ -89,7 +89,7 @@ type Controller struct {
 	cycle        *cycle     // moving mood
 	pulse        float64    // beat pulse of a still mood
 	playingID    string
-	dark         bool // fading to "Lights off"
+	dark         bool   // fading to "Lights off"
 	playing      string // last mood played
 	moodByHand   bool
 	schedKey     string // the schedule time last played
