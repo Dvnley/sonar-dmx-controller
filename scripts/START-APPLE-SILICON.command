@@ -4,4 +4,5 @@ cd "$(dirname "$0")" || exit 1
 xattr -d com.apple.quarantine ./sonar-dmx-mac-arm64 2>/dev/null
 chmod +x ./sonar-dmx-mac-arm64
 echo "Starting Sonar DMX Controller. Close this window (or press Ctrl+C) to stop it."
-exec ./sonar-dmx-mac-arm64 "$@"
+# caffeinate keeps the Mac awake while the app runs, so a schedule keeps playing.
+exec caffeinate -i ./sonar-dmx-mac-arm64 "$@"

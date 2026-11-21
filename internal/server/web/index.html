@@ -16,6 +16,7 @@
   <div id="status" class="pill">checking…</div>
   <nav>
     <button data-tab="perform" class="active">Perform</button>
+    <button data-tab="moods">Moods &amp; schedule</button>
     <button data-tab="live">Fixtures</button>
     <button data-tab="patch">Patch</button>
     <button data-tab="presets">Fixture presets</button>
@@ -72,6 +73,7 @@
   <div class="pbar showbar">
     <button id="flash" class="hit flash">FLASH<small>hold</small></button>
     <button id="pblackout" class="hit">BLACKOUT</button>
+    <button id="markpt" class="hit hidden"></button>
     <label class="pmaster grow">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
   </div>
 
@@ -96,6 +98,68 @@
     <div class="fhead"><b>Scenes</b><button id="scenesave">Save to…</button><button id="sceneclear">Clear…</button></div>
     <p class="hint" id="scenehint">Tap a scene to fade to it.</p>
     <div class="scenegrid" id="scenegrid"></div>
+  </div>
+</section>
+
+<!-- MOODS & SCHEDULE -->
+<section id="tab-moods" class="tab hidden">
+  <div class="card mnow">
+    <div class="fhead">
+      <b>Autopilot</b>
+      <button id="sc-toggle" class="big">Schedule is off</button>
+    </div>
+    <div id="sc-status" class="mstatus"></div>
+    <div id="sc-today" class="today"></div>
+    <div id="sc-problems"></div>
+  </div>
+
+  <div class="card">
+    <div class="fhead"><b>Moods</b><span class="grow"></span><button id="md-starters">Add starter moods</button></div>
+    <p class="hint">A mood is a whole look: the colors, which program is running, its speed (energy) and variation, and the master level. Set the lights how you want them on the <b>Perform</b> tab, then come back and save it here.</p>
+    <div class="row">
+      <input id="md-name" class="grow" placeholder="Name for the current look, e.g. Chill blue">
+      <button id="md-save" class="primary">Save current look as a mood</button>
+    </div>
+    <div class="chips" id="md-fades" style="margin-top:10px"><span class="chiplabel">Fade when I tap Play</span></div>
+    <div id="md-list" class="moodgrid"></div>
+  </div>
+
+  <div class="card hidden" id="mv-card">
+    <div class="fhead"><b id="mv-title">Points &amp; music</b><span class="grow"></span><button id="mv-play" class="primary">Play this mood</button><button id="mv-close">Done</button></div>
+    <p class="hint">Mark a few points and the mood glides from one to the next, round and round. To mark a point: set the lights how you want them (Perform tab, any layout), then tap <b>Mark point</b>. The button also shows on the Perform tab while this is open. Tap a point to see it on the lights.</p>
+    <div class="row"><button id="mv-mark" class="hit">+ Mark point<small>adds how the lights look right now</small></button></div>
+    <div id="mv-points" class="mpoints"></div>
+    <div class="progrow" style="margin-top:12px">
+      <label class="pmaster">Speed <input id="mv-speed" type="range" min="0" max="100"><span id="mv-speedv"></span></label>
+      <label class="pmaster">Rest on each point <input id="mv-hold" type="range" min="0" max="90"><span id="mv-holdv"></span></label>
+    </div>
+    <div class="music">
+      <b>Music</b>
+      <label class="check"><input type="checkbox" id="mv-beat"> Move on the beat (the speed slider picks every 16, 8, 4, 2 or 1 beats)</label>
+      <label class="pmaster grow">Pulse on the beat <input id="mv-pulse" type="range" min="0" max="100"><span id="mv-pulsev"></span></label>
+      <span class="bpm" id="mv-bpm">no beat</span>
+      <button id="mv-tap" class="hit">TAP</button>
+      <button id="mv-mic">Listen with the mic</button>
+      <p class="hint">The music comes from the TAP button or the Mac's mic (the same as music mode on the Perform tab). When no beat has come in for a few seconds, the mood goes back to its own speed and stops pulsing.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="fhead"><b>Schedule</b><span class="grow"></span><span class="meta" id="sc-zone"></span></div>
+    <p class="hint">Each line plays a mood at a time, and it keeps playing until the next line. Untick days to skip them. Times after midnight count as the next day, so 2:00 AM on a Friday night is <b>Saturday</b>. The fade is how long it takes to blend into the new mood.</p>
+    <div id="sc-rows" class="srows"></div>
+    <div class="row">
+      <button id="sc-add">Add a time</button>
+      <span class="grow"></span>
+      <span class="hint" id="sc-dirty"></span>
+      <button id="sc-revert">Undo changes</button>
+      <button id="sc-save" class="primary">Save schedule</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Leaving it running</h2>
+    <div id="sc-tips" class="tips"></div>
   </div>
 </section>
 
@@ -267,5 +331,6 @@
 <script src="app.js"></script>
 <script src="views.js"></script>
 <script src="presets.js"></script>
+<script src="moods.js"></script>
 </body>
 </html>

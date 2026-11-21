@@ -114,7 +114,18 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 			fixtures[i] = f
 		}
 	}
+	c.applyCycle(fixtures, now)
 	c.applyPrograms(fixtures, now)
+	if c.dark {
+		for i := range fixtures {
+			fixtures[i].Enabled = false
+		}
+	}
+	c.applyCrossfade(fixtures, now)
+	if c.dark && c.xfade == nil {
+		c.blackout, c.dark, out.Blackout = true, false, true
+	}
+	c.applyPulse(fixtures, now)
 	if !c.flashUntil.IsZero() {
 		if now.Before(c.flashUntil) {
 			if c.flashOnly == nil {
@@ -263,6 +274,7 @@ func (c *Controller) RecallScene(slot int, fadeSec float64) error {
 	}
 	now := c.now()
 	c.rainbowSec = 0
+	c.stopMotion()
 	c.runs = nil
 	for i, sf := range c.cfg.Scenes[slot].Fixtures {
 		if i >= len(c.cfg.Fixtures) {

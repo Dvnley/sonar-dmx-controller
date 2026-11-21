@@ -290,6 +290,59 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			result(w, c, c.SetPosition(body.Index, body.X, body.Y))
 		}
 	})
+	// moods and the schedule
+	mux.HandleFunc("POST /api/mood/{action}", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			ID     string             `json:"id"`
+			Name   string             `json:"name"`
+			Fade   float64            `json:"fade"`
+			Delta  int                `json:"delta"`
+			Index  int                `json:"index"`
+			Motion *controller.Motion `json:"motion"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		var err error
+		switch r.PathValue("action") {
+		case "save":
+			_, err = c.SaveMood(body.ID, body.Name)
+		case "play":
+			err = c.PlayMood(body.ID, body.Fade)
+		case "rename":
+			err = c.RenameMood(body.ID, body.Name)
+		case "delete":
+			err = c.DeleteMood(body.ID)
+		case "move":
+			err = c.MoveMood(body.ID, body.Delta)
+		case "point-mark":
+			_, err = c.MarkPoint(body.ID)
+		case "point-delete":
+			err = c.EditPoint(body.ID, body.Index, true, 0)
+		case "point-move":
+			err = c.EditPoint(body.ID, body.Index, false, body.Delta)
+		case "point-show":
+			err = c.ShowPoint(body.ID, body.Index)
+		case "motion":
+			if body.Motion == nil {
+				err = errors.New("send motion")
+			} else {
+				err = c.SetMotion(body.ID, *body.Motion)
+			}
+		case "starters":
+			c.AddStarterMoods()
+		default:
+			fail(w, http.StatusNotFound, "unknown mood action")
+			return
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/schedule", func(w http.ResponseWriter, r *http.Request) {
+		var body controller.Schedule
+		if decode(w, r, &body) {
+			result(w, c, c.SetSchedule(body))
+		}
+	})
 	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
 		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}
 		if opts.URLs == nil {
