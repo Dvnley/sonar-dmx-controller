@@ -293,10 +293,12 @@ func New(c *controller.Controller, opts Options) http.Handler {
 	// moods and the schedule
 	mux.HandleFunc("POST /api/mood/{action}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			ID    string  `json:"id"`
-			Name  string  `json:"name"`
-			Fade  float64 `json:"fade"`
-			Delta int     `json:"delta"`
+			ID     string             `json:"id"`
+			Name   string             `json:"name"`
+			Fade   float64            `json:"fade"`
+			Delta  int                `json:"delta"`
+			Index  int                `json:"index"`
+			Motion *controller.Motion `json:"motion"`
 		}
 		if !decode(w, r, &body) {
 			return
@@ -313,6 +315,20 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			err = c.DeleteMood(body.ID)
 		case "move":
 			err = c.MoveMood(body.ID, body.Delta)
+		case "point-mark":
+			_, err = c.MarkPoint(body.ID)
+		case "point-delete":
+			err = c.EditPoint(body.ID, body.Index, true, 0)
+		case "point-move":
+			err = c.EditPoint(body.ID, body.Index, false, body.Delta)
+		case "point-show":
+			err = c.ShowPoint(body.ID, body.Index)
+		case "motion":
+			if body.Motion == nil {
+				err = errors.New("send motion")
+			} else {
+				err = c.SetMotion(body.ID, *body.Motion)
+			}
 		case "starters":
 			c.AddStarterMoods()
 		default:

@@ -106,13 +106,14 @@ func TestScheduleOccurrence(t *testing.T) {
 	// Saturday 02:30 -> off
 	*now = time.Date(2026, 11, 21, 2, 31, 0, 0, loc)
 	c.CheckSchedule()
-	if c.playing != "Lights off" || c.cfg.Fixtures[0].Enabled {
+	c.Frames()
+	if c.playing != "Lights off" || !c.blackout {
 		t.Fatalf("2:30 Sat should be off: %q", c.playing)
 	}
 	// Tuesday 02:31 -> no off entry, still party from Monday 23:00
 	*now = time.Date(2026, 11, 24, 2, 31, 0, 0, loc)
 	c.CheckSchedule()
-	if c.playing != "Party" || !c.cfg.Fixtures[0].Enabled {
+	if c.playing != "Party" || c.blackout {
 		t.Fatalf("Tue 2:31 should be party: %q", c.playing)
 	}
 	// playing by hand sticks until the next time

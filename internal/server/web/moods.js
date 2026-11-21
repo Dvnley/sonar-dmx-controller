@@ -47,8 +47,10 @@ function renderMoods() {
   if (!state.moods || !state.schedule) return;
   if (!schedDirty) schedDraft = copyEntries(state.schedule.entries);
   renderStatus();
+  renderMarkButton();
   if (tab !== "moods") return;
-  const ms = JSON.stringify([state.moods, state.schedule.playing, moodFade, armedDelete, renaming]);
+  renderMotion();
+  const ms = JSON.stringify([state.moods, state.schedule.playing, moodFade, armedDelete, renaming, motionEdit]);
   if (ms !== moodSig) { moodSig = ms; renderMoodList(); }
   const ss = JSON.stringify([schedDraft, state.moods.map(m => [m.id, m.name, m.colors[0]]), schedDirty, state.schedule.current && state.schedule.current.entry]);
   if (ss !== schedSig) { schedSig = ss; renderRows(); }
@@ -90,8 +92,8 @@ function renderMoodList() {
       <div class="bar5">${bars}</div>
       ${renaming === m.id ? `<div class="row"><input class="grow rn" value="${esc(m.name)}"><button data-a="rename-ok" class="primary">OK</button></div>`
         : `<div class="mname">${esc(m.name)}${on ? "<em>● playing</em>" : ""}</div>`}
-      <div class="meta">${m.program ? esc(m.program) : "Still colors"} ${energy(m)}</div>
-      <div class="row"><button class="play primary" data-a="play">Play</button></div>
+      <div class="meta">${m.program ? esc(m.program) : "Still colors"} ${m.points.length >= 2 ? `<span class="energy e1">${esc(m.motion_label)}</span>` : energy(m)}${m.motion.beat || m.motion.pulse ? ` <span class="energy e2">♪ music</span>` : ""}</div>
+      <div class="row"><button class="play primary" data-a="play">Play</button><button data-a="motion" class="${motionEdit === m.id ? "primary" : ""}">Points &amp; music${m.points.length ? ` (${m.points.length})` : ""}</button></div>
       <div class="row">
         <button data-a="update" title="Replace this mood with how the lights look now">Use current look</button>
         <button data-a="rename">Rename</button>
@@ -116,6 +118,12 @@ async function moodAction(id, a) {
   switch (a) {
     case "play": await api("/api/mood/play", { id, fade: moodFade }); break;
     case "update": await api("/api/mood/save", { id }); flashNote(`Saved the current look into ${m.name}.`); break;
+    case "motion":
+      motionEdit = motionEdit === id ? "" : id;
+      savePref("motionedit", motionEdit);
+      motionSig = "";
+      if (motionEdit) setTimeout(() => $("#mv-card").scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+      break;
     case "rename": renaming = renaming === id ? "" : id; break;
     case "rename-ok": {
       const name = $("#md-list .rn").value.trim();
@@ -224,6 +232,97 @@ function renderToday() {
     <div class="nowline" style="left:${nowPct}%"></div></div>
     <div class="hours"><span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span></div>`;
 }
+
+// ---------- points & music (moving moods) ----------
+let motionEdit = loadPref("motionedit", "");
+let motionSig = "";
+let motionLocal = null, motionTouched = 0; // slider values just sent, so a slow reply can't undo them
+
+// same as Motion.MotionLabel in motion.go
+function motionLabel(mo) {
+  if (mo.beat) { const n = 2 ** (4 - Math.round(mo.speed / 25)); return n === 1 ? "every beat" : `every ${n} beats`; }
+  const s = 60 * Math.pow(0.5 / 60, mo.speed / 100);
+  return s >= 10 ? `${Math.round(s)} s per point` : `${s.toFixed(1)} s per point`;
+}
+
+function shownMotion(m) {
+  return motionLocal && motionLocal.id === m.id && Date.now() - motionTouched < 1500 ? motionLocal : m.motion;
+}
+
+function editMood() { return motionEdit && state.moods ? moodById(motionEdit) : null; }
+
+function renderMarkButton() {
+  const m = editMood();
+  const b = $("#markpt");
+  b.classList.toggle("hidden", !m);
+  if (m) b.innerHTML = `+ Mark point<small>for ${esc(m.name)} (${m.points.length} so far)</small>`;
+}
+
+function setSlider(id, v, label) {
+  const el = $(id);
+  if (!(dragging && document.activeElement === el)) el.value = v;
+  $(id + "v").textContent = label;
+}
+
+function renderMotion() {
+  const m = editMood();
+  $("#mv-card").classList.toggle("hidden", !m);
+  if (!m) return;
+  const mo = shownMotion(m);
+  const beat = state.perform.beat;
+  $("#mv-bpm").textContent = beat.bpm ? `${beat.bpm} BPM${beat.live ? "" : " (stopped)"}` : "no beat";
+  $("#mv-bpm").classList.toggle("live", beat.live);
+  $("#mv-mic").textContent = $("#mic").textContent;
+  $("#mv-mic").disabled = $("#mic").disabled;
+  setSlider("#mv-speed", mo.speed, motionLabel(mo));
+  setSlider("#mv-hold", mo.hold, `${Math.round(mo.hold)}%`);
+  setSlider("#mv-pulse", mo.pulse, mo.pulse ? `${Math.round(mo.pulse)}%` : "off");
+  $("#mv-beat").checked = mo.beat;
+  const sig = JSON.stringify([m.id, m.name, m.points]);
+  if (sig === motionSig) return;
+  motionSig = sig;
+  $("#mv-title").textContent = `Points & music: ${m.name}`;
+  $("#mv-points").innerHTML = m.points.length ? m.points.map((css, i) => `<div class="mpoint" data-i="${i}">
+      <button class="sw" style="--pc:${css}" data-a="show" title="Show this point on the lights"><span>${i + 1}</span></button>
+      <div><button data-a="left" ${i === 0 ? "disabled" : ""}>◀</button><button data-a="right" ${i === m.points.length - 1 ? "disabled" : ""}>▶</button><button data-a="del" title="Remove">✕</button></div>
+    </div>`).join("") + (m.points.length === 1 ? `<p class="hint">Mark at least one more point to make it move.</p>` : "")
+    : `<p class="hint">No points yet. With no points the mood stays still (or runs its program). Pulse on the beat works either way.</p>`;
+  $$("#mv-points .mpoint button").forEach(b => b.onclick = () => {
+    const index = +b.closest(".mpoint").dataset.i;
+    const a = b.dataset.a;
+    if (a === "show") api("/api/mood/point-show", { id: m.id, index });
+    else if (a === "del") api("/api/mood/point-delete", { id: m.id, index });
+    else api("/api/mood/point-move", { id: m.id, index, delta: a === "left" ? -1 : 1 });
+  });
+}
+
+function sendMotion(patch) {
+  const m = editMood();
+  if (!m) return;
+  if (!motionLocal || motionLocal.id !== m.id || Date.now() - motionTouched > 1500) motionLocal = { id: m.id, ...m.motion };
+  Object.assign(motionLocal, patch);
+  motionTouched = Date.now();
+  const { id: _, ...motion } = motionLocal;
+  throttled("motion", () => api("/api/mood/motion", { id: m.id, motion }));
+}
+$("#mv-speed").oninput = e => sendMotion({ speed: +e.target.value });
+$("#mv-hold").oninput = e => sendMotion({ hold: +e.target.value });
+$("#mv-pulse").oninput = e => sendMotion({ pulse: +e.target.value });
+$("#mv-beat").onchange = e => sendMotion({ beat: e.target.checked });
+$("#mv-tap").onpointerdown = e => { e.preventDefault(); fetch("/api/beat", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"source":"tap"}' }); };
+$("#mv-mic").onclick = () => $("#mic").click();
+$("#mv-play").onclick = () => editMood() && api("/api/mood/play", { id: motionEdit, fade: moodFade });
+$("#mv-close").onclick = () => { motionEdit = ""; savePref("motionedit", ""); moodSig = ""; renderMoods(); };
+
+async function markPoint(btn) {
+  const m = editMood();
+  if (!m) return;
+  await api("/api/mood/point-mark", { id: m.id });
+  btn.classList.add("pulse");
+  setTimeout(() => btn.classList.remove("pulse"), 400);
+}
+$("#mv-mark").onclick = () => markPoint($("#mv-mark"));
+$("#markpt").onclick = () => markPoint($("#markpt"));
 
 // ---------- actions ----------
 $("#md-save").onclick = async () => {

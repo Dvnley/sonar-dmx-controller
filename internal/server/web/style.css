@@ -260,3 +260,12 @@ header { padding-top: max(10px, env(safe-area-inset-top)); }
 .tips li { margin: 3px 0; }
 .tips div.here { border-color: var(--accent); }
 @media (pointer: coarse) { .days button { width: 40px; } }
+.mpoints { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.mpoint { display: flex; flex-direction: column; align-items: stretch; gap: 4px; width: 92px; }
+.mpoint > button.sw { height: 54px; border-radius: 8px; border: 2px solid var(--line); background: var(--pc); font-weight: 800; color: #000; padding: 0; }
+.mpoint > button.sw span { background: rgba(255,255,255,.75); border-radius: 5px; padding: 0 5px; }
+.mpoint > div { display: flex; gap: 2px; }
+.mpoint > div button { flex: 1; padding: 2px 0; font-size: 12px; }
+#markpt { background: #2d3240; }
+#markpt.pulse, #mv-mark.pulse { background: var(--ok); color: #04210f; }
+.mood .pts { font-size: 11px; color: var(--dim); }

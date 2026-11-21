@@ -30,6 +30,9 @@ type Mood struct {
 	Runs     []ProgramRun   `json:"runs,omitempty"`
 	Master   int            `json:"master"`
 	Rainbow  float64        `json:"rainbow_s,omitempty"`
+	// Points make it a moving mood: it glides from one to the next.
+	Points []MoodPoint `json:"points,omitempty"`
+	Motion Motion      `json:"motion"`
 }
 
 // MoodOff is the schedule's "lights off" entry.
@@ -69,6 +72,9 @@ type MoodInfo struct {
 	Program string   `json:"program,omitempty"`
 	Speed   float64  `json:"speed"`
 	Music   bool     `json:"music,omitempty"`
+	Points  []string `json:"points"` // a preview color per marked point
+	Motion  Motion   `json:"motion"`
+	MoveTxt string   `json:"motion_label"`
 }
 
 // Occurrence is one time an entry plays.
@@ -141,7 +147,8 @@ func (c *Controller) SaveMood(id, name string) (string, error) {
 		if i < 0 {
 			return "", fmt.Errorf("no mood %q", id)
 		}
-		m.ID, m.Name = id, c.cfg.Moods[i].Name
+		old := c.cfg.Moods[i]
+		m.ID, m.Name, m.Points, m.Motion = id, old.Name, old.Points, old.Motion
 		if name != "" {
 			m.Name = name
 		}
@@ -182,6 +189,9 @@ func (c *Controller) DeleteMood(id string) error {
 		return fmt.Errorf("no mood %q", id)
 	}
 	c.cfg.Moods = append(c.cfg.Moods[:i], c.cfg.Moods[i+1:]...)
+	if c.playingID == id {
+		c.stopMotion()
+	}
 	var keep []ScheduleEntry
 	for _, e := range c.cfg.Schedule.Entries {
 		if e.Mood != id {
@@ -236,10 +246,10 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 	c.fades = map[int]*fade{}
 	c.flashUntil, c.strobeHz, c.blackout = time.Time{}, 0, false
 	c.runs, c.rainbowSec = nil, 0
+	c.cycle, c.pulse, c.playingID, c.dark = nil, 0, id, false
 	if id == MoodOff {
-		for i := range c.cfg.Fixtures {
-			c.cfg.Fixtures[i].Enabled = false
-		}
+		// fade to dark, then hold a blackout (the Blackout button undoes it)
+		c.dark = true
 		c.playing = "Lights off"
 		c.changed()
 		return
@@ -256,7 +266,15 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 		copy(f.Values, sf.Values)
 		f.Brightness, f.Enabled = sf.Brightness, sf.Enabled
 	}
+	if len(m.Points) >= 2 {
+		c.startCycle(m, now)
+	} else {
+		c.pulse = m.Motion.Pulse
+	}
 	for _, r := range m.Runs {
+		if c.cycle != nil {
+			break // the points replace the programs
+		}
 		run := r
 		run.Fixtures = nil
 		for _, i := range r.Fixtures {
@@ -272,7 +290,7 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 		c.removeFromRuns(run.Fixtures)
 		c.runs = append(c.runs, &run)
 	}
-	if m.Rainbow > 0 {
+	if m.Rainbow > 0 && c.cycle == nil {
 		c.rainbowSec, c.rainbowStart = m.Rainbow, now
 	}
 	c.cfg.Master = clamp(m.Master, 0, 100)
@@ -331,15 +349,18 @@ type starter struct {
 	size      float64
 	variation int
 	master    int
+	pulse     float64
+	points    [][3]uint8 // a moving mood: glide through these colors
 }
 
 var starters = []starter{
-	{"Warm welcome", [3]uint8{255, 110, 20}, "", 0, 0, 0, 80},
-	{"Chill blue", [3]uint8{0, 60, 255}, "fade", 12, 70, 2, 70},
-	{"Dinner glow", [3]uint8{255, 60, 0}, "wave", 8, 90, 1, 60},
-	{"Party", [3]uint8{255, 0, 200}, "jump", 55, 100, 3, 100},
-	{"Peak hour", [3]uint8{255, 255, 255}, "chase", 78, 40, 0, 100},
-	{"Last call", [3]uint8{255, 40, 140}, "fade", 20, 60, 5, 55},
+	{"Warm welcome", [3]uint8{255, 110, 20}, "", 0, 0, 0, 80, 0, nil},
+	{"Chill blue", [3]uint8{0, 60, 255}, "fade", 12, 70, 2, 70, 0, nil},
+	{"Dinner glow", [3]uint8{255, 60, 0}, "wave", 8, 90, 1, 60, 0, nil},
+	{"Party", [3]uint8{255, 0, 200}, "jump", 55, 100, 3, 100, 35, nil},
+	{"Peak hour", [3]uint8{255, 255, 255}, "chase", 78, 40, 0, 100, 50, nil},
+	{"Last call", [3]uint8{255, 40, 140}, "fade", 20, 60, 5, 55, 0, nil},
+	{"Sunset drift", [3]uint8{255, 120, 0}, "", 0, 0, 0, 75, 0, [][3]uint8{{255, 120, 0}, {255, 30, 0}, {255, 0, 120}, {120, 0, 255}}},
 }
 
 // AddStarterMoods adds a ready-made set of moods built for the current patch.
@@ -364,14 +385,22 @@ func (c *Controller) AddStarterMoods() int {
 		if exists {
 			continue
 		}
-		m := Mood{ID: c.newMoodID(s.name), Name: s.name, Master: s.master}
-		for _, f := range c.cfg.Fixtures {
-			f.Values = append(fixture.Values(nil), f.Values...)
-			if f.HasColor() {
-				setRGB(&f, s.rgb[0], s.rgb[1], s.rgb[2])
-				f.Brightness, f.Enabled = 100, true
+		m := Mood{ID: c.newMoodID(s.name), Name: s.name, Master: s.master, Motion: Motion{Speed: 35, Hold: 20, Pulse: s.pulse}}
+		look := func(rgb [3]uint8) []SceneFixture {
+			var out []SceneFixture
+			for _, f := range c.cfg.Fixtures {
+				f.Values = append(fixture.Values(nil), f.Values...)
+				if f.HasColor() {
+					setRGB(&f, rgb[0], rgb[1], rgb[2])
+					f.Brightness, f.Enabled = 100, true
+				}
+				out = append(out, SceneFixture{Values: f.Values, Brightness: f.Brightness, Enabled: f.Enabled})
 			}
-			m.Fixtures = append(m.Fixtures, SceneFixture{Values: f.Values, Brightness: f.Brightness, Enabled: f.Enabled})
+			return out
+		}
+		m.Fixtures = look(s.rgb)
+		for _, rgb := range s.points {
+			m.Points = append(m.Points, MoodPoint{Fixtures: look(rgb)})
 		}
 		if s.program != "" && len(color) > 0 {
 			m.Runs = []ProgramRun{{Fixtures: append([]int(nil), color...), Program: s.program, Speed: s.speed, Size: s.size, Variation: s.variation}}
@@ -552,7 +581,7 @@ func (c *Controller) scheduleState() ScheduleState {
 func (c *Controller) moodInfos() []MoodInfo {
 	out := []MoodInfo{}
 	for _, m := range c.cfg.Moods {
-		info := MoodInfo{ID: m.ID, Name: m.Name, Colors: []string{}}
+		info := MoodInfo{ID: m.ID, Name: m.Name, Colors: []string{}, Points: c.pointColors(m), Motion: m.Motion, MoveTxt: m.Motion.MotionLabel()}
 		seen := map[string]bool{}
 		add := func(css string) {
 			if !seen[css] && len(info.Colors) < 6 && css != "rgb(0,0,0)" {
@@ -560,7 +589,12 @@ func (c *Controller) moodInfos() []MoodInfo {
 				info.Colors = append(info.Colors, css)
 			}
 		}
-		if len(m.Runs) > 0 {
+		if len(m.Points) >= 2 {
+			info.Program = fmt.Sprintf("Moves through %d points", len(m.Points))
+			for _, css := range info.Points {
+				add(css)
+			}
+		} else if len(m.Runs) > 0 {
 			r := m.Runs[0]
 			info.Speed, info.Music = r.Speed, r.Music
 			for _, p := range Programs {

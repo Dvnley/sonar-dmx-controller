@@ -86,7 +86,11 @@ type Controller struct {
 	live         []fixture.Fixture // last look sent, for the UI
 	beats        BeatClock
 	xfade        *crossfade // mood crossfade
-	playing      string     // last mood played
+	cycle        *cycle     // moving mood
+	pulse        float64    // beat pulse of a still mood
+	playingID    string
+	dark         bool // fading to "Lights off"
+	playing      string // last mood played
 	moodByHand   bool
 	schedKey     string // the schedule time last played
 	started      bool
@@ -428,6 +432,7 @@ func (c *Controller) StartTest() {
 func (c *Controller) SetBlackout(on *bool) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.dark = false
 	if on == nil {
 		c.blackout = !c.blackout
 	} else {
@@ -463,7 +468,8 @@ func (c *Controller) SetColor(targets []int, col ColorSet) error {
 		return err
 	}
 	now := c.now()
-	c.rainbowSec, c.xfade = 0, nil
+	c.rainbowSec = 0
+	c.stopMotion()
 	c.removeFromRuns(idx)
 	full := col.R != nil && col.G != nil && col.B != nil
 	for _, i := range idx {
@@ -649,7 +655,8 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	defer c.mu.Unlock()
 	c.cfg.Fixtures = fixtures
 	c.fades = map[int]*fade{}
-	c.runs, c.xfade = nil, nil
+	c.runs = nil
+	c.stopMotion()
 	c.changed()
 	return nil
 }

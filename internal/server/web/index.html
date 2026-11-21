@@ -73,6 +73,7 @@
   <div class="pbar showbar">
     <button id="flash" class="hit flash">FLASH<small>hold</small></button>
     <button id="pblackout" class="hit">BLACKOUT</button>
+    <button id="markpt" class="hit hidden"></button>
     <label class="pmaster grow">Master <input id="pmaster" type="range" min="0" max="100"><span id="pmasterv"></span>%</label>
   </div>
 
@@ -121,6 +122,26 @@
     </div>
     <div class="chips" id="md-fades" style="margin-top:10px"><span class="chiplabel">Fade when I tap Play</span></div>
     <div id="md-list" class="moodgrid"></div>
+  </div>
+
+  <div class="card hidden" id="mv-card">
+    <div class="fhead"><b id="mv-title">Points &amp; music</b><span class="grow"></span><button id="mv-play" class="primary">Play this mood</button><button id="mv-close">Done</button></div>
+    <p class="hint">Mark a few points and the mood glides from one to the next, round and round. To mark a point: set the lights how you want them (Perform tab, any layout), then tap <b>Mark point</b>. The button also shows on the Perform tab while this is open. Tap a point to see it on the lights.</p>
+    <div class="row"><button id="mv-mark" class="hit">+ Mark point<small>adds how the lights look right now</small></button></div>
+    <div id="mv-points" class="mpoints"></div>
+    <div class="progrow" style="margin-top:12px">
+      <label class="pmaster">Speed <input id="mv-speed" type="range" min="0" max="100"><span id="mv-speedv"></span></label>
+      <label class="pmaster">Rest on each point <input id="mv-hold" type="range" min="0" max="90"><span id="mv-holdv"></span></label>
+    </div>
+    <div class="music">
+      <b>Music</b>
+      <label class="check"><input type="checkbox" id="mv-beat"> Move on the beat (the speed slider picks every 16, 8, 4, 2 or 1 beats)</label>
+      <label class="pmaster grow">Pulse on the beat <input id="mv-pulse" type="range" min="0" max="100"><span id="mv-pulsev"></span></label>
+      <span class="bpm" id="mv-bpm">no beat</span>
+      <button id="mv-tap" class="hit">TAP</button>
+      <button id="mv-mic">Listen with the mic</button>
+      <p class="hint">The music comes from the TAP button or the Mac's mic (the same as music mode on the Perform tab). When no beat has come in for a few seconds, the mood goes back to its own speed and stops pulsing.</p>
+    </div>
   </div>
 
   <div class="card">
