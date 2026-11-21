@@ -219,3 +219,44 @@ header { padding-top: max(10px, env(safe-area-inset-top)); }
 .stops { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px 102px; }
 .stops button { padding: 2px 8px; font-size: 11px; }
 .stops button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* moods & schedule */
+.mnow .fhead b { font-size: 16px; }
+#sc-toggle.on { background: var(--ok); border-color: var(--ok); color: #04210f; }
+.mstatus { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 12px; }
+.mstatus div { background: #10131a; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.mstatus small { display: block; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.mstatus b { font-size: 16px; }
+.today { margin-top: 12px; }
+.today .strip24 { display: flex; height: 26px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); position: relative; }
+.today .seg { height: 100%; position: relative; min-width: 2px; }
+.today .seg span { position: absolute; left: 4px; top: 4px; font-size: 11px; font-weight: 700; color: #000; background: rgba(255,255,255,.7); border-radius: 4px; padding: 0 4px; white-space: nowrap; overflow: hidden; max-width: calc(100% - 8px); }
+.today .nowline { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; box-shadow: 0 0 6px #fff; }
+.today .hours { display: flex; justify-content: space-between; font-size: 10px; color: var(--dim); margin-top: 2px; }
+.moodgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+.mood { background: #10131a; border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.mood.playing { border-color: var(--ok); box-shadow: 0 0 0 1px var(--ok); }
+.mood .bar5 { display: flex; height: 34px; border-radius: 6px; overflow: hidden; }
+.mood .bar5 i { flex: 1; }
+.mood .mname { font-weight: 700; font-size: 15px; display: flex; gap: 6px; align-items: center; }
+.mood .mname em { font-style: normal; font-size: 11px; color: var(--ok); margin-left: auto; }
+.mood .row { margin-top: 0; }
+.mood .row button { padding: 4px 8px; font-size: 12px; }
+.mood .row button.play { flex: 1; font-weight: 700; font-size: 14px; padding: 8px; }
+.energy { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 99px; background: #222733; }
+.energy.e0 { color: #9dbbff; } .energy.e1 { color: #7fe0b0; } .energy.e2 { color: #ffd36a; } .energy.e3 { color: #ff7a7a; }
+.srows { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.srow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: #10131a; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.srow.cur { border-color: var(--ok); }
+.srow i.sw { width: 14px; height: 30px; border-radius: 4px; flex: none; }
+.srow input[type=time] { width: 130px; }
+.srow select { min-width: 150px; }
+.days { display: flex; gap: 3px; }
+.days button { padding: 4px 0; width: 32px; font-size: 12px; color: var(--dim); }
+.days button.on { background: rgba(79,140,255,.25); border-color: var(--accent); color: var(--text); }
+.tips { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.tips div { background: #10131a; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.tips ol { margin: 6px 0 0; padding-left: 20px; }
+.tips li { margin: 3px 0; }
+.tips div.here { border-color: var(--accent); }
+@media (pointer: coarse) { .days button { width: 40px; } }

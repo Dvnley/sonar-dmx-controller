@@ -7,4 +7,5 @@ if [ "$(uname -m)" = "arm64" ]; then bin=./sonar-dmx-mac-arm64; else bin=./sonar
 xattr -d com.apple.quarantine "$bin" 2>/dev/null
 chmod +x "$bin"
 echo "Starting Sonar DMX Controller with iPad remote. Close this window (or press Ctrl+C) to stop it."
-exec "$bin" -remote "$@"
+# caffeinate keeps the Mac awake while the app runs, so a schedule keeps playing.
+exec caffeinate -i "$bin" -remote "$@"

@@ -89,6 +89,7 @@ function render() {
   renderSweep();
   renderSetup();
   if (tab === "presets" && window.renderPresets) renderPresets();
+  if (window.renderMoods) renderMoods();
 }
 
 let conflictHTML = "";

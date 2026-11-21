@@ -33,6 +33,9 @@ type Config struct {
 	Scenes    []Scene `json:"scenes,omitempty"`
 	// CustomProfiles are fixture presets made in the app.
 	CustomProfiles []fixture.Profile `json:"custom_profiles,omitempty"`
+	// Moods are whole looks the schedule plays at set times.
+	Moods    []Mood   `json:"moods,omitempty"`
+	Schedule Schedule `json:"schedule"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
@@ -82,6 +85,11 @@ type Controller struct {
 	runs         []*ProgramRun
 	live         []fixture.Fixture // last look sent, for the UI
 	beats        BeatClock
+	xfade        *crossfade // mood crossfade
+	playing      string     // last mood played
+	moodByHand   bool
+	schedKey     string // the schedule time last played
+	started      bool
 
 	Net       Sender
 	BoundPort bool
@@ -179,8 +187,11 @@ func (c *Controller) Run(ctx context.Context) {
 	c.mu.Unlock()
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	poll := time.NewTicker(3 * time.Second)
+	sched := time.NewTicker(time.Second)
 	defer tick.Stop()
 	defer poll.Stop()
+	defer sched.Stop()
+	c.CheckSchedule()
 	c.Poll()
 	for {
 		select {
@@ -190,6 +201,8 @@ func (c *Controller) Run(ctx context.Context) {
 			c.sendFrames()
 		case <-poll.C:
 			c.Poll()
+		case <-sched.C:
+			c.CheckSchedule()
 		}
 	}
 }
@@ -325,6 +338,8 @@ type State struct {
 	ConfigPath  string                `json:"config_path"`
 	Types       []fixture.ChannelType `json:"channel_types"`
 	Perform     PerformState          `json:"perform"`
+	Moods       []MoodInfo            `json:"moods"`
+	Schedule    ScheduleState         `json:"schedule"`
 }
 
 // State snapshots everything the UI needs.
@@ -336,7 +351,7 @@ func (c *Controller) State() State {
 		TargetIP: c.cfg.TargetIP, FPS: c.cfg.FPS, Master: c.cfg.Master, Blackout: c.blackout,
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
-		Perform: c.performState(),
+		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}
@@ -448,7 +463,7 @@ func (c *Controller) SetColor(targets []int, col ColorSet) error {
 		return err
 	}
 	now := c.now()
-	c.rainbowSec = 0
+	c.rainbowSec, c.xfade = 0, nil
 	c.removeFromRuns(idx)
 	full := col.R != nil && col.G != nil && col.B != nil
 	for _, i := range idx {
@@ -634,7 +649,7 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	defer c.mu.Unlock()
 	c.cfg.Fixtures = fixtures
 	c.fades = map[int]*fade{}
-	c.runs = nil
+	c.runs, c.xfade = nil, nil
 	c.changed()
 	return nil
 }

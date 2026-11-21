@@ -169,7 +169,7 @@ func (c *Controller) StartProgram(targets []int, run ProgramRun) error {
 		}
 	}
 	c.removeFromRuns(fx)
-	c.rainbowSec = 0
+	c.rainbowSec, c.xfade = 0, nil
 	c.runs = append(c.runs, &run)
 	return nil
 }

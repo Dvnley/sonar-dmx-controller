@@ -115,6 +115,7 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 		}
 	}
 	c.applyPrograms(fixtures, now)
+	c.applyCrossfade(fixtures, now)
 	if !c.flashUntil.IsZero() {
 		if now.Before(c.flashUntil) {
 			if c.flashOnly == nil {
@@ -262,7 +263,7 @@ func (c *Controller) RecallScene(slot int, fadeSec float64) error {
 		return errors.New("that scene is empty")
 	}
 	now := c.now()
-	c.rainbowSec = 0
+	c.rainbowSec, c.xfade = 0, nil
 	c.runs = nil
 	for i, sf := range c.cfg.Scenes[slot].Fixtures {
 		if i >= len(c.cfg.Fixtures) {
