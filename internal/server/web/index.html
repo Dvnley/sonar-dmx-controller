@@ -15,7 +15,8 @@
   <h1>Sonar DMX <span class="ver">v0.3</span></h1>
   <div id="status" class="pill">checking…</div>
   <nav>
-    <button data-tab="perform" class="active">Perform</button>
+    <button data-tab="show" class="active">Show</button>
+    <button data-tab="perform">Perform</button>
     <button data-tab="moods">Moods &amp; schedule</button>
     <button data-tab="live">Fixtures</button>
     <button data-tab="patch">Patch</button>
@@ -30,8 +31,44 @@
 <div id="error" class="banner err hidden"></div>
 
 <main>
+<!-- SHOW -->
+<section id="tab-show" class="tab">
+  <div id="sh-rig" class="card shrig hidden"></div>
+
+  <div class="card shtop">
+    <div class="shrow">
+      <button id="sh-blackout" class="hit shbo">BLACKOUT</button>
+      <button id="sh-flash" class="hit flash">FLASH<small>hold</small></button>
+      <div class="chips" id="sh-strobe"><span class="chiplabel">Strobe</span></div>
+      <label class="pmaster grow">All lights <input id="sh-master" type="range" min="0" max="100"><span id="sh-masterv"></span>%</label>
+    </div>
+    <div class="shspeed">
+      <div class="shspeedlabel"><b>Speed</b><span id="sh-speedword"></span></div>
+      <span class="shslow">Slow</span>
+      <input id="sh-speed" type="range" min="0" max="100">
+      <span class="shfast">Fast</span>
+      <label class="check shmusic"><input type="checkbox" id="sh-music"> Follow the beat</label>
+      <button id="sh-tap" class="hit">TAP</button>
+      <span class="bpm" id="sh-bpm"></span>
+    </div>
+    <p class="hint">Speed changes everything that is running: the party programs and the movement.</p>
+  </div>
+
+  <div class="card">
+    <div class="fhead"><b class="shtitle">Party program <small>for every color light</small></b><button id="sh-stopall" class="danger">Stop everything</button></div>
+    <div class="shprogs" id="sh-progs"></div>
+    <div class="chips" id="sh-colors"><span class="chiplabel">Colors</span></div>
+    <div class="fhead shmovehead"><b class="shtitle">Movement <small>for every moving light</small></b></div>
+    <div class="shprogs" id="sh-moves"></div>
+    <div class="chips" id="sh-size"><span class="chiplabel">How far they move</span></div>
+  </div>
+
+  <h2 class="shh2">Your lights <small>each box controls only that light</small></h2>
+  <div class="shgroups" id="sh-groups"></div>
+</section>
+
 <!-- LIVE -->
-<section id="tab-perform" class="tab">
+<section id="tab-perform" class="tab hidden">
   <div class="pbar">
     <div class="chips" id="views"><span class="chiplabel">Layout</span></div>
     <div class="chips" id="fades"><span class="chiplabel">Fade</span></div>
@@ -332,5 +369,6 @@
 <script src="views.js"></script>
 <script src="presets.js"></script>
 <script src="moods.js"></script>
+<script src="show.js"></script>
 </body>
 </html>

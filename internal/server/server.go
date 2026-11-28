@@ -280,6 +280,62 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 		result(w, c, err)
 	})
+	// show mode
+	mux.HandleFunc("POST /api/movement", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			controller.MoveRun
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StartMovement(targets, body.MoveRun)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/movement/stop", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StopMovement(targets)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/show/speed", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Speed float64 `json:"speed"`
+			Music bool    `json:"music"`
+		}
+		if decode(w, r, &body) {
+			c.SetShowSpeed(body.Speed, body.Music)
+			result(w, c, nil)
+		}
+	})
+	mux.HandleFunc("POST /api/show/group", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			On       *bool           `json:"on"`
+			Level    *int            `json:"level"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.ShowGroup(targets, body.On, body.Level)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/show/setup", func(w http.ResponseWriter, r *http.Request) {
+		result(w, c, c.SetupRig())
+	})
 	mux.HandleFunc("POST /api/position", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Index int     `json:"index"`

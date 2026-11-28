@@ -10,7 +10,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 let state = null;
 let diag = null;
 let profiles = [];
-let tab = "perform";
+let tab = "show";
 let cardSig = "";
 let patchDraft = null;
 let patchDirty = false;
@@ -90,6 +90,7 @@ function render() {
   renderSetup();
   if (tab === "presets" && window.renderPresets) renderPresets();
   if (window.renderMoods) renderMoods();
+  if (window.renderShow) renderShow();
 }
 
 let conflictHTML = "";

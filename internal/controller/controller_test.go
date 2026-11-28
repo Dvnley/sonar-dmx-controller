@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,9 +29,23 @@ func newTest(t *testing.T) (*Controller, *time.Time) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	c.cfg.Fixtures = legacyRig()
 	now := time.Unix(1000, 0)
 	c.now = func() time.Time { return now }
 	return c, &now
+}
+
+// legacyRig is the v0.3 default patch most tests were written against: six
+// uplights at 1-36 (on), the wash at 17 and a 9CH spot at 1.
+func legacyRig() []fixture.Fixture {
+	var out []fixture.Fixture
+	for i, addr := range []int{1, 7, 13, 19, 25, 31} {
+		f, _ := fixture.New(fmt.Sprintf("Uplight %d", i+1), UplightProfile, "6CH", 0, addr)
+		out = append(out, f)
+	}
+	wash, _ := fixture.New("Wash FX", "wash-fx", "3CH", 0, 17)
+	spot, _ := fixture.New("Spot", "spot-9ch", "", 0, 1)
+	return append(out, wash, spot)
 }
 
 func TestParseScriptMatchesProbe(t *testing.T) {

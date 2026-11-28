@@ -75,7 +75,8 @@ func TestValidate(t *testing.T) {
 	if _, err := New("x", "nope", "", 0, 1); err == nil {
 		t.Error("expected unknown profile error")
 	}
-	m := FindMode(Profiles[2], "9ch (DIMMER ON 5)")
+	sp, _ := FindProfile("spot-9ch")
+	m := FindMode(sp, "9ch (DIMMER ON 5)")
 	if m.Channels[4].Type != Dimmer {
 		t.Error("mode lookup should be case-insensitive")
 	}

@@ -50,6 +50,13 @@ type ProgramRun struct {
 	Variation int     `json:"variation"` // palette index
 	Music     bool    `json:"music"`     // follow the music beat
 	start     time.Time
+	base      float64 // beats done before start, so a speed change does not jump
+}
+
+// rebase folds the beats done so far into base, before the speed changes.
+func (r *ProgramRun) rebase(now time.Time) {
+	r.base += now.Sub(r.start).Minutes() * r.bpm()
+	r.start = now
 }
 
 // bpm is the free-running tempo for a speed setting.
@@ -165,7 +172,8 @@ func (c *Controller) StartProgram(targets []int, run ProgramRun) error {
 	run.start = c.now()
 	for _, r := range c.runs {
 		if r.Program == run.Program && sameInts(r.Fixtures, fx) {
-			run.start = r.start
+			r.rebase(run.start)
+			run.base = r.base
 		}
 	}
 	c.removeFromRuns(fx)
@@ -221,7 +229,7 @@ func (c *Controller) applyPrograms(fixtures []fixture.Fixture, now time.Time) {
 		if r.Music && c.beats.period > 0 {
 			pos = c.beats.position(now) * r.musicRate()
 		} else {
-			pos = now.Sub(r.start).Minutes() * r.bpm()
+			pos = r.base + now.Sub(r.start).Minutes()*r.bpm()
 		}
 		n := len(r.Fixtures)
 		for k, i := range r.Fixtures {

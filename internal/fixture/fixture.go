@@ -108,10 +108,33 @@ var Profiles = []Profile{
 		}}},
 	},
 	{
-		ID: "wash-fx", Name: "Chauvet Wash FX", Kind: "color",
-		Notes: "3CH RGB inferred from the red test turning the wash blue. Check the mode on the fixture's display.",
+		ID: "wash-fx", Name: "Chauvet wash", Kind: "color",
+		Notes: "3CH RGB: ch 1 red, ch 2 green, ch 3 blue (checked on the rig).",
 		Modes: []Mode{{Name: "3CH", Channels: []Channel{
 			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0),
+		}}},
+	},
+	{
+		ID: "gobo-spot-11ch", Name: "Gobo moving-head spot", Kind: "moving",
+		Notes: "Danley's spots: ch 1 moves up/down, ch 3 left/right, ch 6 is brightness (checked on the rig). " +
+			"The other channels follow the usual layout of these lights and are a guess until checked with the channel sweep.",
+		Modes: []Mode{{Name: "11CH", Channels: []Channel{
+			ch("Up / down", Tilt, 128), ch("Up / down fine", TiltFine, 0),
+			ch("Left / right", Pan, 128), ch("Left / right fine", PanFine, 0),
+			ch("Move speed", Speed, 0), ch("Brightness", Dimmer, 255),
+			ch("Strobe", Shutter, 0), ch("Color wheel", Color, 0), ch("Gobo", Gobo, 0),
+			ch("Auto/sound", Auto, 0), ch("Reset", Reset, 0),
+		}}},
+	},
+	{
+		ID: "spider-10ch", Name: "Spider moving wash", Kind: "moving",
+		Notes: "8-eye RGBW spider in 10CH mode. This channel layout is the most common one for these lights but is a GUESS: " +
+			"check it with the channel sweep and fix it in the Patch tab.",
+		Modes: []Mode{{Name: "10CH", Channels: []Channel{
+			ch("Left bar tilt", Tilt, 128), ch("Right bar tilt", Tilt, 128),
+			ch("Brightness", Dimmer, 255), ch("Strobe", Shutter, 0),
+			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0), ch("White", White, 0),
+			ch("Move speed", Speed, 0), ch("Auto/sound", Auto, 0),
 		}}},
 	},
 	{

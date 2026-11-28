@@ -67,28 +67,43 @@ for installing it with Xcode and connecting the AN2.
 
 | Fixture | Profile | Mode | Universe | Address |
 | --- | --- | --- | --- | --- |
-| Uplight 1-6 | Chauvet Freedom Flex H4 IP | 6CH (R G B A W UV) | 0 | 1, 7, 13, 19, 25, 31 |
-| Wash FX | Chauvet Wash FX | 3CH (R G B) | 0 | 17 |
-| Spot | Generic moving-head spot | 9CH | 0 | 1 |
+| Spots | Gobo moving-head spot | 11CH | 0 | 1 |
+| Chauvet wash | Chauvet wash | 3CH (R G B) | 0 | 17 |
+| Spider | Spider moving wash | 10CH | 0 | 34 |
+| Uplight 1-6 (off) | Chauvet Freedom Flex H4 IP | 6CH (R G B A W UV) | 0 | 1, 7, 13, 19, 25, 31 |
 
-**These addresses overlap.** The uplights cover 1-36, which collides with the
-spot (1-9) and the wash (17-19). The app shows a warning until one group is
-moved, either to free addresses (for example uplights at 41 and up) or to
-universe 1. Where fixtures overlap, the highest value wins on each channel.
+Lights of one type share an address, so one patch line drives them all. The
+uplights stay in the patch but are switched off, because 1-36 overlaps the
+others. An older config keeps its own patch: the Show tab offers **Load my
+rig** to switch to this one.
 
-The Wash FX mode was inferred from a test (sending 255 on channel 19 turned it
-blue). The spot's channel layout is a guess for a common cheap 9CH head:
+Spot channels (checked on the rig: 1, 3 and 6; the rest is the usual layout
+for these spots):
 
-1 Pan · 2 Tilt · 3 Color wheel · 4 Gobo · 5 Shutter/strobe · 6 Dimmer ·
-7 Pan/tilt speed · 8 Auto/sound · 9 Reset
+1 Up/down · 2 Up/down fine · 3 Left/right · 4 Left/right fine · 5 Move speed ·
+6 Brightness · 7 Strobe · 8 Color wheel · 9 Gobo · 10 Auto/sound · 11 Reset
 
-There is a second mode with dimmer and shutter swapped. If neither matches,
-make your own sliders in the **Fixture presets** tab (see below) and apply
-them to the spots.
+Spider channels, **a guess** for the common 8-eye RGBW spider in 10CH mode:
+
+1 Left bar tilt · 2 Right bar tilt · 3 Brightness · 4 Strobe · 5 Red ·
+6 Green · 7 Blue · 8 White · 9 Move speed · 10 Auto/sound
+
+If a light does the wrong thing, check it in **Channel sweep** and fix its
+channel map in the Patch tab or make a preset in **Fixture presets**. The old
+9CH spot profile is still there.
 
 ## Pages
 
-- **Perform** (the default, built for the iPad). Pick a layout at the top:
+- **Show** (the default): one screen for running the night. At the top:
+  BLACKOUT, FLASH (hold), strobe, a level for all lights, and one **Speed**
+  slider (Slow to Fast, or Follow the beat with TAP) that changes everything
+  that is running. Then party programs for every color light and movement
+  patterns (Circle, Side to side, Up and down, Figure 8, Wander) for every
+  moving light. Below, one box per light type (Spots, Chauvet wash, Spider)
+  with its DMX address, on/off, brightness, colors, its own effect and
+  movement, aim sliders named for what they do, and every channel with its
+  number.
+- **Perform** (built for the iPad). Pick a layout at the top:
   - **Groups**: a column per fixture type (uplights, wash, spot) with color
     pads, a level fader, a FLASH button for just that group and a Programs
     button. The spot column has a pan/tilt pad and a dimmer instead.
@@ -151,6 +166,16 @@ them to the spots.
 
 All POST bodies are JSON. Every POST returns the full state (like
 `GET /api/state`) or `{"error": "..."}` with status 400.
+
+Show mode endpoints:
+
+| Endpoint | Body | Notes |
+| --- | --- | --- |
+| `POST /api/movement` | `{"fixtures", "pattern", "speed", "size", "music"}` | patterns: circle, sweep, nod, figure8, wander; moves around the aim |
+| `POST /api/movement/stop` | `{"fixtures"}` | back to the aim |
+| `POST /api/show/speed` | `{"speed", "music"}` | 0-100, applied to every program and movement without restarting them |
+| `POST /api/show/group` | `{"fixtures", "on", "level"}` | turning on opens a closed brightness channel |
+| `POST /api/show/setup` | `{}` | loads the default patch above |
 
 v0.2 endpoints:
 

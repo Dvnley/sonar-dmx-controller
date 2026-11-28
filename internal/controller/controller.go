@@ -41,19 +41,29 @@ type Config struct {
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
 const UplightProfile = "freedom-flex-h4-ip"
 
-// DefaultConfig is the rig as it is patched today. The uplights at 1-36
-// overlap the spot (1-9) and the wash (17-19); the UI warns about it until
-// one group is re-patched.
+// DefaultConfig is Danley's rig: gobo spots at 1, the Chauvet washes at 17
+// and the spider washes at 34, all on universe 0. Fixtures of one type share
+// an address, so one patch entry drives them all. The six Freedom Flex
+// uplights are kept in the patch but switched off, because their addresses
+// (1-36) overlap the others.
 func DefaultConfig() Config {
 	cfg := Config{TargetIP: "2.0.0.1", FPS: 40, Master: 100}
+	cfg.Fixtures = append(cfg.Fixtures, RigFixtures()...)
+	return cfg
+}
+
+// RigFixtures is the patch of DefaultConfig.
+func RigFixtures() []fixture.Fixture {
+	var out []fixture.Fixture
 	for i, addr := range []int{1, 7, 13, 19, 25, 31} {
 		f, _ := fixture.New(fmt.Sprintf("Uplight %d", i+1), UplightProfile, "6CH", 0, addr)
-		cfg.Fixtures = append(cfg.Fixtures, f)
+		f.Enabled = false
+		out = append(out, f)
 	}
-	wash, _ := fixture.New("Wash FX", "wash-fx", "3CH", 0, 17)
-	spot, _ := fixture.New("Spot", "spot-9ch", "", 0, 1)
-	cfg.Fixtures = append(cfg.Fixtures, wash, spot)
-	return cfg
+	wash, _ := fixture.New("Chauvet wash", "wash-fx", "3CH", 0, 17)
+	spot, _ := fixture.New("Spots", "gobo-spot-11ch", "", 0, 1)
+	spider, _ := fixture.New("Spider", "spider-10ch", "", 0, 34)
+	return append(out, wash, spot, spider)
 }
 
 // Sender is the Art-Net side, an interface so tests can capture frames.
@@ -83,6 +93,10 @@ type Controller struct {
 	strobeStart  time.Time
 	flashOnly    map[int]bool // nil: flash everything
 	runs         []*ProgramRun
+	moves        []*MoveRun
+	showSpeed    float64
+	showMusic    bool
+	showSpeedSet bool
 	live         []fixture.Fixture // last look sent, for the UI
 	beats        BeatClock
 	xfade        *crossfade // mood crossfade
@@ -344,6 +358,7 @@ type State struct {
 	Perform     PerformState          `json:"perform"`
 	Moods       []MoodInfo            `json:"moods"`
 	Schedule    ScheduleState         `json:"schedule"`
+	Show        ShowState             `json:"show"`
 }
 
 // State snapshots everything the UI needs.
@@ -356,6 +371,7 @@ func (c *Controller) State() State {
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
 		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
+		Show: c.showState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}
@@ -656,6 +672,7 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	c.cfg.Fixtures = fixtures
 	c.fades = map[int]*fade{}
 	c.runs = nil
+	c.moves = nil
 	c.stopMotion()
 	c.changed()
 	return nil

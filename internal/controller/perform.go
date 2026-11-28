@@ -115,6 +115,7 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 		}
 	}
 	c.applyCycle(fixtures, now)
+	c.applyMoves(fixtures, now)
 	c.applyPrograms(fixtures, now)
 	if c.dark {
 		for i := range fixtures {
