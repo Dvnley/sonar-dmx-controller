@@ -63,7 +63,11 @@
   </div>
 
   <div class="sh-bar">
-    <button id="sh-blackout" class="sh-bo">Blackout</button>
+    <div class="sh-hits">
+      <button id="sh-blackout" class="sh-bo">Blackout</button>
+      <button id="sh-flash" class="sh-hit">Flash <small>hold</small></button>
+      <button id="sh-strobe" class="sh-hit">Strobe</button>
+    </div>
     <label class="sh-dial"><span>Brightness</span><input id="sh-master" type="range" min="0" max="100"><b id="sh-masterv"></b></label>
     <label class="sh-dial"><span>Speed</span><input id="sh-speed" type="range" min="0" max="100"><b id="sh-speedword"></b></label>
   </div>
@@ -75,8 +79,6 @@
   <div class="sh-panel" id="sh-panel"></div>
 
   <div class="sh-foot">
-    <button id="sh-flash" class="sh-small">Flash <small>(hold)</small></button>
-    <button id="sh-strobe" class="sh-small">Strobe</button>
     <label class="sh-small sh-beat"><input type="checkbox" id="sh-music"> Follow the beat</label>
     <button id="sh-tap" class="sh-small hidden">Tap to the beat</button>
     <span class="sh-bpm" id="sh-bpm"></span>

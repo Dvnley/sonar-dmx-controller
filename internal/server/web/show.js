@@ -322,7 +322,7 @@ function renderAuto() {
   $("#sh-autometer").className = "lv" + (a.level === "Calm" ? 0 : a.level === "Groove" ? 1 : 2);
   let txt;
   if (!a.on) {
-    txt = micOK ? "Plays music to the Mac's mic: quiet parts get slow, calm looks; loud parts get fast, busy ones. New look every phrase, a big hit on the drop."
+    txt = micOK ? "Listens to the music with the Mac's mic: slow and calm when it's quiet, fast and busy when it's loud, a new look every phrase."
       : "On this device Auto changes looks by itself at the Speed slider's pace. For it to follow the music, turn Auto on from the browser on the Mac.";
   } else {
     const moment = a.moment === "drop" ? " · Drop!" : a.moment === "spotlight" ? " · Spotlight moment" : "";
@@ -349,14 +349,19 @@ function renderQuickLooks() {
   if (sig === qlooksSig) return;
   qlooksSig = sig;
   if (!state.moods.length) {
-    el.innerHTML = `<span class="sh-qhead">Looks</span><button id="sh-addlooks" class="primary">Add the ready-made looks</button>`;
+    el.innerHTML = `<button id="sh-addlooks" class="primary">Add the ready-made looks</button>`;
     $("#sh-addlooks").onclick = () => api("/api/mood/starters", {});
     return;
   }
-  el.innerHTML = `<span class="sh-qhead">Looks</span>` + state.moods.map((m, i) => `
+  const grad = cs => {
+    const c = (cs && cs.length ? cs : ["#333"]).slice(0, 5).map(esc);
+    return c.length === 1 ? c[0] : `linear-gradient(90deg, ${c.join(", ")})`;
+  };
+  el.innerHTML = state.moods.map((m, i) => `
     <button class="sh-qlook${m.id === playing && !auto ? " on" : ""}" data-qlook="${esc(m.id)}">
-      ${i < 9 ? `<small>${i + 1}</small>` : ""}<span class="sh-qdots">${(m.colors || []).slice(0, 4).map(c => `<i style="background:${esc(c)}"></i>`).join("")}</span>${esc(m.name)}
-    </button>`).join("") + `<button class="sh-qlook sh-qmore" id="sh-morelooks" title="Adds any ready-made looks you don't have yet">+ New looks</button>`;
+      <i class="sh-qbar" style="background:${grad(m.colors)}"></i>
+      <span>${esc(m.name)}</span>${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}
+    </button>`).join("") + `<button class="sh-qlook sh-qmore" id="sh-morelooks" title="Adds any ready-made looks you don't have yet"><span>+ New looks</span></button>`;
   $("#sh-morelooks").onclick = () => api("/api/mood/starters", {});
   $$("[data-qlook]", el).forEach(b => b.onclick = () => playLook(b.dataset.qlook));
 }
@@ -471,9 +476,29 @@ function renderLights(groups) {
 }
 
 // a row of choices where one is lit
+// a small color strip on each effect button, so you can see what it does
+const FX_PREVIEW = {
+  chase: "linear-gradient(90deg,#fff 0 25%,#222 25% 50%,#fff 50% 75%,#222 75%)",
+  jump: "linear-gradient(90deg,#ff3030 0 33%,#30ff60 33% 66%,#3060ff 66%)",
+  fade: "linear-gradient(90deg,#ff3030,#30ff60,#3060ff)",
+  rainbow: "linear-gradient(90deg,red,orange,yellow,lime,cyan,blue,violet)",
+  wave: "linear-gradient(90deg,#222,#3a8bff,#222,#3a8bff,#222)",
+  pulse: "linear-gradient(90deg,#ff2bd6,#222)",
+  strobe: "linear-gradient(90deg,#fff 0 15%,#222 15% 50%,#fff 50% 65%,#222 65%)",
+  police: "linear-gradient(90deg,#ff1010 0 50%,#1030ff 50%)",
+  fire: "linear-gradient(90deg,#ff2000,#ff8c00,#ff3000,#ffb000)",
+  sparkle: "radial-gradient(circle at 30% 50%,#fff 0 3px,transparent 4px),radial-gradient(circle at 75% 40%,#fff 0 2px,transparent 3px),#3a3fbf",
+  breathe: "linear-gradient(90deg,#1b1b40,#5a7dff,#1b1b40)",
+  heartbeat: "linear-gradient(90deg,#ff1040 0 12%,#300 12% 22%,#ff1040 22% 32%,#300 32%)",
+  lightning: "linear-gradient(90deg,#0a005a 0 40%,#fff 40% 46%,#0a005a 46%)",
+  ocean: "linear-gradient(90deg,#001eff,#00dcb4,#001eff)",
+  sunset: "linear-gradient(90deg,#ff8c00,#ff3200,#ff003c,#aa00c8)",
+  disco: "linear-gradient(90deg,#ff00c8,#ffe600,#00dcff,#5a00ff)",
+  water: "linear-gradient(90deg,#0019ff,#0096ff,#ebf5ff,#0096ff,#0019ff)",
+};
 function choices(name, items, current) {
   return `<div class="sh-choices" data-name="${name}">${items.map(([label, v]) =>
-    `<button class="${String(v) === String(current) ? "on" : ""}" data-v="${esc(v)}">${esc(label)}</button>`).join("")}</div>`;
+    `<button class="${String(v) === String(current) ? "on" : ""}" data-v="${esc(v)}">${name === "fx" && FX_PREVIEW[v] ? `<i class="fxp" style="background:${FX_PREVIEW[v]}"></i>` : ""}${esc(label)}</button>`).join("")}</div>`;
 }
 function onChoice(el, name, fn) { $$(`.sh-choices[data-name="${name}"] button`, el).forEach(b => b.onclick = () => fn(b.dataset.v)); }
 

@@ -72,9 +72,11 @@ document.addEventListener("pointercancel", () => { dragging = 0; });
 // The Show tab is all most nights need; the other tabs sit behind "More".
 const setMore = on => { document.body.classList.toggle("showall", on); $("#more").textContent = on ? "Less" : "More"; savePref("more", on); };
 setMore(loadPref("more", false));
+document.body.dataset.tab = "show";
 $("#more").onclick = () => setMore(!document.body.classList.contains("showall"));
 $$("nav button[data-tab]").forEach(b => b.onclick = () => {
   tab = b.dataset.tab;
+  document.body.dataset.tab = tab;
   $$("nav button[data-tab]").forEach(x => x.classList.toggle("active", x === b));
   $$(".tab").forEach(s => s.classList.toggle("hidden", s.id !== "tab-" + tab));
   if (tab === "patch" && !patchDirty) resetDraft();

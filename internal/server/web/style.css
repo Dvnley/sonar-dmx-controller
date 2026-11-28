@@ -471,3 +471,36 @@ nav .morebtn:hover { color: var(--text); }
 kbd { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 4px; background: #2a2f3a; border: 1px solid #3a4050; font-size: 11px; line-height: 16px; text-align: center; color: var(--text); }
 @media (max-width: 760px) { .sh-tips { flex-direction: column; } .sh-keys { display: none; } }
 .sh-qmore { color: var(--accent); font-weight: 500; }
+
+/* polish */
+body[data-tab="show"] #status.bad, body[data-tab="show"] #status.mid,
+body[data-tab="faders"] #status.bad, body[data-tab="faders"] #status.mid { display: none; }
+.sh-auto:not(.on) .sh-meter { display: none; }
+.sh-bar { grid-template-columns: auto 1fr 1fr; }
+.sh-hits { display: flex; gap: 8px; }
+.sh-hit { height: 56px; padding: 0 18px; border-radius: 14px; font-size: 15px; font-weight: 700; background: var(--panel); border: 1px solid var(--line); }
+.sh-hit small { color: var(--dim); font-weight: 500; font-size: 11px; }
+.sh-hit.on { background: #fff; color: #000; border-color: #fff; }
+.sh-hit.on small { color: #555; }
+.sh-qlooks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; overflow: visible; padding: 0; }
+.sh-qlook { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 12px 11px; text-align: left; white-space: normal; border-radius: 14px; min-height: 64px; }
+.sh-qlook span { font-size: 14px; line-height: 1.2; padding-right: 22px; }
+.sh-qlook kbd { position: absolute; right: 8px; bottom: 9px; }
+.sh-qbar { display: block; height: 8px; border-radius: 99px; }
+.sh-qlook.on { border-color: #fff; background: rgba(255,255,255,.08); box-shadow: 0 0 0 1px #fff inset; }
+.sh-qmore { justify-content: center; align-items: center; border-style: dashed; background: transparent; color: var(--accent); }
+.sh-choices .fxp { display: block; height: 5px; border-radius: 99px; margin: -2px 0 6px; }
+@media (max-width: 760px) {
+  header { flex-wrap: nowrap; gap: 8px; padding: 8px 12px; padding-top: max(8px, env(safe-area-inset-top)); }
+  h1 { font-size: 15px; white-space: nowrap; }
+  #status { display: none; }
+  nav { flex-wrap: nowrap; overflow-x: auto; }
+  nav button { padding: 8px 12px; }
+  .sh-bar { grid-template-columns: 1fr; }
+  .sh-hits { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .sh-hits button { padding: 0 8px; }
+  .sh-autobtn { min-height: 68px; }
+  .sh-qlooks { grid-template-columns: 1fr 1fr; }
+  .sh-qlook kbd { display: none; }
+  .sh-qlook span { padding-right: 0; }
+}
