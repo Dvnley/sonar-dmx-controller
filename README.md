@@ -103,6 +103,7 @@ channel map in the Patch tab or make a preset in **Fixture presets**. The old
   with its DMX address, on/off, brightness, colors, its own effect and
   movement, aim sliders named for what they do, and every channel with its
   number.
+- **Faders**: every DMX channel 1-512 by hand, 16 at a time like a hardware desk, labelled with the light and what the channel does. A moved fader overrides the app on that channel until you tap Auto or hand everything back. Blackout still wins. Also says plainly whether the Mac can reach the AN2.
 - **Perform** (built for the iPad). Pick a layout at the top:
   - **Groups**: a column per fixture type (uplights, wash, spot) with color
     pads, a level fader, a FLASH button for just that group and a Programs

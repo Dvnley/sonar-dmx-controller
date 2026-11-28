@@ -60,9 +60,13 @@ func RigFixtures() []fixture.Fixture {
 		f.Enabled = false
 		out = append(out, f)
 	}
+	// Start in a color, so the lights show something the moment they are
+	// connected: blue wash, white spider.
 	wash, _ := fixture.New("Chauvet wash", "wash-fx", "3CH", 0, 17)
+	wash.Set(fixture.Blue, 255)
 	spot, _ := fixture.New("Spots", "gobo-spot-11ch", "", 0, 1)
 	spider, _ := fixture.New("Spider", "spider-10ch", "", 0, 34)
+	spider.Set(fixture.White, 255)
 	return append(out, wash, spot, spider)
 }
 
@@ -82,6 +86,7 @@ type Controller struct {
 	blackout bool
 	testFrom time.Time
 	sweep    *Sweep
+	manual   map[int]map[int]uint8 // hand faders: universe -> channel -> value
 	sendErr  string
 	saveT    *time.Timer
 
@@ -280,7 +285,9 @@ func (c *Controller) frames() map[int][]byte {
 		fixtures = testLook(fixtures, testColors[phase])
 		out = fixture.Output{Master: 100}
 	}
-	return fixture.Render(fixtures, out)
+	frames := fixture.Render(fixtures, out)
+	c.applyManual(frames)
+	return frames
 }
 
 func (c *Controller) testPhase(now time.Time) int {
@@ -359,6 +366,7 @@ type State struct {
 	Moods       []MoodInfo            `json:"moods"`
 	Schedule    ScheduleState         `json:"schedule"`
 	Show        ShowState             `json:"show"`
+	Faders      FaderState            `json:"faders"`
 }
 
 // State snapshots everything the UI needs.
@@ -371,7 +379,7 @@ func (c *Controller) State() State {
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
 		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
-		Show: c.showState(),
+		Show: c.showState(), Faders: c.faderState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}

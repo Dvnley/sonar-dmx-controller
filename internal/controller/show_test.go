@@ -123,3 +123,38 @@ func TestShowGroupOpensDimmer(t *testing.T) {
 		t.Fatalf("on at 40%% should give 102, got %d", got)
 	}
 }
+
+func TestHandFaders(t *testing.T) {
+	c, _ := newTest(t)
+	if err := c.SetupRig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetFaders(0, map[int]int{17: 10, 300: 200}); err != nil {
+		t.Fatal(err)
+	}
+	f := c.Frames()[0]
+	if f[16] != 10 || f[299] != 200 {
+		t.Fatalf("faders not applied: ch17=%d ch300=%d", f[16], f[299])
+	}
+	if s := c.State().Faders; s.Set[17] != 10 || s.Output[299] != 200 {
+		t.Fatalf("state %v", s.Set)
+	}
+	on := true
+	c.SetBlackout(&on)
+	if c.Frames()[0][299] != 0 {
+		t.Fatal("blackout must win over faders")
+	}
+	off := false
+	c.SetBlackout(&off)
+	c.ReleaseFaders(0, []int{17})
+	if f := c.Frames()[0]; f[16] != 0 || f[18] != 255 || f[299] != 200 {
+		t.Fatalf("release 17: got %d %d %d (wash should be back to blue)", f[16], f[18], f[299])
+	}
+	c.ReleaseFaders(0, nil)
+	if c.Frames()[0][299] != 0 {
+		t.Fatal("release all")
+	}
+	if err := c.SetFader(0, 513, 1); err == nil {
+		t.Fatal("513 accepted")
+	}
+}

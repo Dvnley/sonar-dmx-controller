@@ -348,3 +348,28 @@ nav .morebtn:hover { color: var(--text); }
   .sh-slider { grid-template-columns: 110px 1fr 36px; }
   .sh-panel { padding: 16px; }
 }
+
+/* faders tab */
+#tab-faders { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.fd-conn { padding: 14px 18px; border-radius: 14px; border: 1px solid var(--line); }
+.fd-conn.ok { background: rgba(46,204,113,.1); border-color: rgba(46,204,113,.4); }
+.fd-conn.mid { background: rgba(255,176,32,.1); border-color: rgba(255,176,32,.4); }
+.fd-conn.bad { background: rgba(255,77,90,.1); border-color: rgba(255,77,90,.4); }
+.fd-top h2 { margin: 0; font-size: 22px; }
+.fd-pages { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.fd-pages button { display: flex; flex-direction: column; align-items: flex-start; padding: 8px 14px; border-radius: 12px; background: var(--panel); }
+.fd-pages button span { color: var(--dim); font-size: 12px; }
+.fd-pages button.on { background: #18233d; border-color: var(--accent); }
+.fd-bank { display: grid; grid-template-columns: repeat(16, 1fr); gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 10px; }
+.fd-col { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; padding: 6px 0; border-radius: 10px; }
+.fd-col.held { background: rgba(79,140,255,.12); }
+.fd-col input { writing-mode: vertical-lr; direction: rtl; width: 32px; height: 220px; margin: 0; }
+.fd-val { font-variant-numeric: tabular-nums; font-size: 13px; }
+.fd-num { font-weight: 700; font-size: 15px; }
+.fd-what { color: var(--dim); font-size: 10px; text-align: center; line-height: 1.2; height: 2.4em; overflow: hidden; width: 100%; padding: 0 2px; }
+.fd-free { min-height: 26px !important; height: 26px; padding: 0 6px !important; font-size: 11px; border-radius: 6px; background: none; border-color: transparent; color: var(--accent); }
+.fd-foot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (max-width: 760px) {
+  .fd-bank { grid-template-columns: repeat(8, 1fr); }
+  .fd-col input { height: 160px; }
+}

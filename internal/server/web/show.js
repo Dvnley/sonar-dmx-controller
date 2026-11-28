@@ -131,6 +131,17 @@ function renderShow() {
   if (tab !== "show" || !state || !state.show) return;
   const sh = state.show, p = state.perform;
 
+  // say plainly when the lights can't be reached
+  const conn = $("#sh-conn");
+  const lost = diag && !diag.an2_online;
+  conn.classList.toggle("hidden", !lost);
+  if (lost) {
+    conn.className = "fd-conn " + (diag.artnet_ip_ok ? "mid" : "bad");
+    conn.innerHTML = diag.artnet_ip_ok
+      ? `<b>The AN2 (${esc(diag.target)}) is not answering,</b> so the lights won't get anything. Check it has power and its network cable is in.`
+      : `<b>The Mac can't reach the AN2,</b> so the lights won't get anything. Plug in the USB network adapter and set it to <code>2.0.0.2</code> / <code>255.0.0.0</code> in System Settings › Network.`;
+  }
+
   // things that change often are updated in place
   const m = $("#sh-master");
   if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master + "%"; }

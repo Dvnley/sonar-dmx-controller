@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 
 	"github.com/dvnley/sonar-dmx-controller/internal/controller"
 	"github.com/dvnley/sonar-dmx-controller/internal/fixture"
@@ -332,6 +333,30 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			err = c.ShowGroup(targets, body.On, body.Level)
 		}
 		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/faders", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Universe int            `json:"universe"`
+			Values   map[string]int `json:"values"`  // channel -> value
+			Release  []int          `json:"release"` // channels to hand back
+			All      bool           `json:"release_all"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		vals := map[int]int{}
+		for k, v := range body.Values {
+			n, err := strconv.Atoi(k)
+			if err != nil {
+				fail(w, http.StatusBadRequest, "channel "+k+" is not a number")
+				return
+			}
+			vals[n] = v
+		}
+		if body.All || len(body.Release) > 0 {
+			c.ReleaseFaders(body.Universe, body.Release)
+		}
+		result(w, c, c.SetFaders(body.Universe, vals))
 	})
 	mux.HandleFunc("POST /api/show/setup", func(w http.ResponseWriter, r *http.Request) {
 		result(w, c, c.SetupRig())

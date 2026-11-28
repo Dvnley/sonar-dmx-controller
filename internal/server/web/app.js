@@ -95,6 +95,7 @@ function render() {
   if (tab === "presets" && window.renderPresets) renderPresets();
   if (window.renderMoods) renderMoods();
   if (window.renderShow) renderShow();
+  if (window.renderFaders) renderFaders();
 }
 
 let conflictHTML = "";
