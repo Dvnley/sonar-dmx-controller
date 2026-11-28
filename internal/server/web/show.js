@@ -92,6 +92,7 @@ function sendShowColor(fixtures, name) {
   return api("/api/color", { fixtures, r: white ? 0 : r, g: white ? 0 : g, b: white ? 0 : b, w: white ? 255 : 0, a: 0, uv: 0, fade: 0.3 });
 }
 
+$("#sh-phone").onclick = () => { shSel = shSel === "phone" ? "all" : "phone"; savePref("showsel", shSel); showSig = ""; loadPhoneInfo(); renderShow(); };
 $("#sh-blackout").onclick = () => api("/api/blackout", { on: !state.blackout });
 $("#sh-master").oninput = e => {
   $("#sh-masterv").textContent = e.target.value + "%";
@@ -160,11 +161,12 @@ function renderShow() {
   $$("#tab-show .sh-glow").forEach(el => el.style.setProperty("--lc", glow(+el.dataset.i)));
 
   const groups = showGroups();
-  if (shSel !== "all" && shSel !== "schedule" && !groups.some(g => g.key === shSel)) shSel = "all";
+  if (!["all", "schedule", "phone"].includes(shSel) && !groups.some(g => g.key === shSel)) shSel = "all";
   const sig = JSON.stringify([groups.map(g => [g.key, g.name, g.on, g.list.map(f => [f.brightness, f.values, f.enabled])]),
     p.runs.map(r => [r.program, r.fixtures, r.variation]), sh.moves.map(r => [r.pattern, r.fixtures, r.size]),
     sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length,
-    shSel === "schedule" ? [state.schedule, state.moods.map(m => [m.id, m.name, m.colors]), lookDelArmed, addingRow] : 0]);
+    shSel === "schedule" ? [state.schedule, state.moods.map(m => [m.id, m.name, m.colors]), lookDelArmed, schedDay, schedSel, tlDraft] : 0,
+    shSel === "phone" ? phoneInfo : 0]);
   // don't rebuild the schedule while a time or look is being picked
   const editing = shSel === "schedule" && document.activeElement && document.activeElement.closest && document.activeElement.closest("#sh-panel") && /INPUT|SELECT/.test(document.activeElement.tagName);
   if (sig === showSig || dragging || editing) return;
@@ -173,7 +175,9 @@ function renderShow() {
   renderRig(sh);
   renderLights(groups);
   const panel = $("#sh-panel");
-  if (shSel === "schedule") renderSchedule(panel);
+  $("#sh-phone").classList.toggle("on", shSel === "phone");
+  if (shSel === "phone") renderPhone(panel);
+  else if (shSel === "schedule") renderSchedule(panel);
   else if (shSel === "all") renderEverything(panel, groups);
   else renderLight(panel, groups.find(g => g.key === shSel));
 }
@@ -329,71 +333,180 @@ function renderLight(panel, g) {
   };
 }
 
-// ---------- simple schedule ----------
-const DAY_SETS = [["Every day", []], ["Mon–Fri", [1, 2, 3, 4, 5]], ["Fri & Sat", [5, 6]], ["Sat & Sun", [0, 6]]];
+// ---------- schedule: a timeline of the night ----------
+// The night runs from noon to noon, so a 1 AM "lights off" sits after the
+// 9 PM party instead of at the start of the day.
+const DAY_SETS = [["Every day", []], ["Mon–Fri", [1, 2, 3, 4, 5]], ["Fri & Sat", [5, 6]], ["Sat & Sun", [0, 6]], ["Only this day", null]];
+const DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const NIGHT_START = 12 * 60; // noon
 let lookDelArmed = "";
-let addingRow = false;
+let addingRow = false; // kept for the render signature
+let schedDay = new Date().getDay();
+let tlDraft = null;   // entries being edited, saved a moment after the last change
+let schedSaveT = 0;
+let schedSel = -1;       // index into tlDraft of the line picked on the timeline
 
-function daysKey(days) {
-  const d = (days || []).slice().sort().join(",");
-  const hit = DAY_SETS.find(([, v]) => v.slice().sort().join(",") === d);
-  return hit ? hit[0] : "Custom";
-}
-
+const toMin = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+const fromMin = m => { m = ((m % 1440) + 1440) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const nightPos = t => (toMin(t) - NIGHT_START + 1440) % 1440; // minutes since noon
 function clockLabel(t) {
   const [h, m] = t.split(":").map(Number);
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
 }
-
-function scheduleRows(panel) {
-  return $$(".sh-srow", panel).map(r => {
-    const days = $("[data-days]", r).value;
-    const known = DAY_SETS.find(d => d[0] === days);
-    return {
-      time: $("[data-time]", r).value || "20:00",
-      mood: $("[data-mood]", r).value,
-      days: known ? known[1] : JSON.parse(r.dataset.days || "[]"),
-      fade: $("[data-mood]", r).value === "off" ? 60 : 30,
-    };
-  }).filter(e => e.mood);
+function daysLabel(days) {
+  const d = (days || []).slice().sort().join(",");
+  const hit = DAY_SETS.find(([, v]) => v && v.slice().sort().join(",") === d);
+  return hit ? hit[0] : (days || []).map(x => DAY_SHORT[x]).join(", ");
 }
+// an entry plays on a night that starts on day d: times after midnight
+// belong to the night before
+function onNight(e, d) {
+  const day = toMin(e.time) < NIGHT_START ? (d + 1) % 7 : d;
+  return !e.days || !e.days.length || e.days.includes(day);
+}
+function moodColor2(id) {
+  if (id === "off") return "#000";
+  const m = (state.moods || []).find(x => x.id === id);
+  const cs = (m && m.colors && m.colors.length ? m.colors : ["#555"]).slice(0, 4);
+  return cs.length > 1 ? `linear-gradient(90deg, ${cs.join(",")})` : cs[0];
+}
+function moodLabel(id) { return id === "off" ? "Lights off" : ((state.moods || []).find(x => x.id === id) || { name: "?" }).name; }
 
-function saveShowSchedule(panel, enabled) {
-  const sc = state.schedule;
-  let tzName = "";
-  try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
-  return api("/api/schedule", { enabled: enabled === undefined ? sc.enabled : enabled, time_zone: sc.time_zone || tzName, entries: scheduleRows(panel) });
+function scheduleDraft() {
+  if (!tlDraft) tlDraft = state.schedule.entries.map(e => ({ time: e.time, mood: e.mood, days: e.days ? [...e.days] : [], fade: e.fade }));
+  return tlDraft;
+}
+function queueSave(now) {
+  clearTimeout(schedSaveT);
+  const go = () => {
+    const sc = state.schedule;
+    let tzName = "";
+    try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
+    const entries = tlDraft;
+    api("/api/schedule", { enabled: sc.enabled, time_zone: sc.time_zone || tzName, entries })
+      .then(() => { tlDraft = null; showSig = ""; renderShow(); })
+      .catch(() => { tlDraft = null; });
+  };
+  if (now) go(); else schedSaveT = setTimeout(go, 600);
+  showSig = ""; renderShow();
 }
 
 function renderSchedule(panel) {
   const sc = state.schedule, moods = state.moods || [];
-  const status = !sc.enabled ? "The schedule is off. The lights only change when you change them."
-    : sc.next ? `Next: <b>${esc(sc.next.name)}</b> at ${esc(sc.next.clock)}` + (sc.current ? ` · now playing <b>${esc(sc.current.name)}</b>` : "")
-      : "Add a time below.";
-  const look = id => `<option value="off" ${id === "off" ? "selected" : ""}>Lights off</option>` +
+  const draft = scheduleDraft();
+  const tonight = draft.map((e, i) => ({ e, i })).filter(x => onNight(x.e, schedDay)).sort((a, b) => nightPos(a.e.time) - nightPos(b.e.time));
+  const status = !sc.enabled ? "Off. The lights only change when you change them."
+    : sc.next ? `Next: <b>${esc(sc.next.name)}</b> at ${esc(sc.next.clock)}` : "On. Add a look to the night below.";
+
+  // timeline blocks: each look runs until the next one that night
+  let blocks = "";
+  tonight.forEach(({ e, i }, k) => {
+    const a = nightPos(e.time), b = k + 1 < tonight.length ? nightPos(tonight[k + 1].e.time) : 1440;
+    const left = a / 1440 * 100, width = Math.max(0.6, (b - a) / 1440 * 100);
+    blocks += `<div class="tl-block ${i === schedSel ? "sel" : ""} ${e.mood === "off" ? "off" : ""}" data-i="${i}" style="left:${left}%;width:${width}%;--bg:${moodColor2(e.mood)}">
+      <span>${esc(moodLabel(e.mood))}</span></div>
+      <div class="tl-handle ${i === schedSel ? "sel" : ""}" data-i="${i}" style="left:${left}%" title="Drag to change the time"><b>${esc(clockLabel(e.time).replace(":00", ""))}</b></div>`;
+  });
+  let ticks = "";
+  for (let h = 0; h <= 24; h += 2) {
+    const t = fromMin(NIGHT_START + h * 60);
+    ticks += `<span style="left:${h / 24 * 100}%">${h === 24 ? "" : clockLabel(t).replace(":00", "")}</span>`;
+  }
+  const nowD = new Date();
+  const nowPos = ((nowD.getHours() * 60 + nowD.getMinutes()) - NIGHT_START + 1440) % 1440;
+  const isTonight = schedDay === (nowD.getHours() * 60 + nowD.getMinutes() < NIGHT_START ? (nowD.getDay() + 6) % 7 : nowD.getDay());
+
+  const lookOpts = id => `<option value="off" ${id === "off" ? "selected" : ""}>Lights off</option>` +
     moods.map(m => `<option value="${esc(m.id)}" ${m.id === id ? "selected" : ""}>${esc(m.name)}</option>`).join("");
-  const row = e => `<div class="sh-srow" data-days='${JSON.stringify(e.days || [])}'>
-      <input type="time" value="${esc(e.time)}" data-time>
-      <select data-mood>${look(e.mood)}</select>
-      <select data-days>${DAY_SETS.map(([n]) => `<option ${n === daysKey(e.days) ? "selected" : ""}>${n}</option>`).join("")}${daysKey(e.days) === "Custom" ? `<option selected>Custom</option>` : ""}</select>
-      <button class="sh-x" data-del title="Remove this time">✕</button>
-    </div>`;
-  const entries = sc.entries.slice();
-  if (addingRow) entries.push({ time: "20:00", mood: moods.length ? moods[0].id : "off", days: [] });
+  const rows = tonight.map(({ e, i }) => `<div class="sh-srow ${i === schedSel ? "sel" : ""}" data-i="${i}">
+      <div class="tl-time"><button data-step="-15" title="15 minutes earlier">−</button>
+        <label><input type="time" value="${esc(e.time)}" data-time><b>${esc(clockLabel(e.time))}</b></label>
+        <button data-step="15" title="15 minutes later">+</button></div>
+      <span class="tl-dot" style="background:${moodColor2(e.mood)}"></span>
+      <select data-mood>${lookOpts(e.mood)}</select>
+      <select data-days>${DAY_SETS.map(([n, v]) => `<option value="${n}" ${v && daysLabel(e.days) === n ? "selected" : ""}>${n === "Only this day" ? "Only " + DAY_SHORT[schedDay] + "s" : n}</option>`).join("")}
+        ${DAY_SETS.some(([n, v]) => v && daysLabel(e.days) === n) ? "" : `<option selected value="custom">${esc(daysLabel(e.days))}</option>`}</select>
+      <button class="sh-x" data-del title="Remove">✕</button>
+    </div>`).join("");
 
   panel.innerHTML = `<div class="sh-phead"><div><h2>Schedule</h2><p>${status}</p></div>
       <button class="sh-switch ${sc.enabled ? "on" : ""}" data-sched><span></span>${sc.enabled ? "On" : "Off"}</button></div>
-    ${section("1. Save looks", `<p class="hint sh-tight">Set the lights the way you like (colors, effect, movement, speed), then give it a name.</p>
+    <div class="tl-days">${DAY_SHORT.map((d, k) => `<button class="${k === schedDay ? "on" : ""}" data-day="${k}">${d}${k === nowD.getDay() ? " ·" : ""}</button>`).join("")}</div>
+    <div class="tl">
+      <div class="tl-track" id="tl-track">${blocks || `<p class="tl-empty">Nothing planned for ${DAY_SHORT[schedDay]} night. Add a look below.</p>`}
+        ${isTonight ? `<i class="tl-now" style="left:${nowPos / 1440 * 100}%" title="Now"></i>` : ""}</div>
+      <div class="tl-ticks">${ticks}</div>
+    </div>
+    <p class="hint sh-tight">Drag a time on the bar to move it, or use − and + below. Each look fades in over 30 seconds and plays until the next one.</p>
+    <div class="sh-rows">${rows}</div>
+    <div class="sh-addline">
+      <select id="sh-addmood">${lookOpts(moods.length ? moods[0].id : "off")}</select>
+      <button id="sh-addtime" class="primary">Add to ${DAY_SHORT[schedDay]} night</button>
+    </div>
+    ${section("Looks", `<p class="hint sh-tight">Set the lights how you like (colors, effects, movement, speed) and save it as a look. Tap a look to see it now.</p>
       <div class="sh-saveline"><input id="sh-lookname" placeholder="Name, e.g. Chill blue" maxlength="40"><button id="sh-savelook" class="primary">Save look</button></div>
-      <div class="sh-looks">${moods.map(m => `<span class="sh-look"><i style="background:${esc((m.colors || [])[0] || "#333")}"></i>
+      <div class="sh-looks">${moods.map(m => `<span class="sh-look"><i style="background:${moodColor2(m.id)}"></i>
         <button data-play="${esc(m.id)}" title="Show this look now">${esc(m.name)}</button>
-        <button class="sh-x" data-forget="${esc(m.id)}" title="Delete this look">${lookDelArmed === m.id ? "Delete?" : "✕"}</button></span>`).join("")}
-        ${moods.length ? "" : `<button id="sh-starters">Add some ready-made looks</button>`}</div>`)}
-    ${section("2. Pick when they play", `<div class="sh-rows">${entries.map(row).join("") || `<p class="hint sh-tight">No times yet.</p>`}</div>
-      <button class="sh-link" id="sh-addtime">+ Add a time</button>`, "it fades into each look over 30 seconds")}
-    <p class="hint sh-tight">Keep this app open and the Mac awake (the START file keeps it awake) for the schedule to run.</p>`;
+        <button class="sh-x" data-forget="${esc(m.id)}" title="Delete this look">${lookDelArmed === m.id ? "Delete?" : "✕"}</button></span>`).join("")}</div>
+      <button class="sh-link" id="sh-starters">+ Add ready-made looks (Ocean floor, Thunderstorm, Disco fever and more)</button>`)}
+    <p class="hint sh-tight">The schedule runs while this app is open and the Mac is awake.</p>`;
 
-  $("[data-sched]", panel).onclick = () => { addingRow = false; saveShowSchedule(panel, !sc.enabled); };
+  $("[data-sched]", panel).onclick = () => {
+    let tzName = "";
+    try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
+    clearTimeout(schedSaveT);
+    api("/api/schedule", { enabled: !sc.enabled, time_zone: sc.time_zone || tzName, entries: scheduleDraft() }).then(() => { tlDraft = null; });
+  };
+  $$("[data-day]", panel).forEach(b => b.onclick = () => { schedDay = +b.dataset.day; schedSel = -1; showSig = ""; renderShow(); });
+  $$(".tl-block", panel).forEach(b => b.onclick = () => { schedSel = +b.dataset.i; showSig = ""; renderShow(); });
+
+  // drag a handle along the bar to move that time, in 15 minute steps
+  const track = $("#tl-track", panel);
+  $$(".tl-handle", panel).forEach(h => {
+    h.onpointerdown = ev => {
+      ev.preventDefault();
+      h.setPointerCapture(ev.pointerId);
+      const i = +h.dataset.i;
+      schedSel = i;
+      dragging++;
+      const move = e2 => {
+        const r = track.getBoundingClientRect();
+        const pos = Math.round(Math.min(1, Math.max(0, (e2.clientX - r.left) / r.width)) * 1440 / 15) * 15;
+        const t = fromMin(NIGHT_START + Math.min(pos, 1440 - 15));
+        if (t === draft[i].time) return;
+        draft[i].time = t;
+        h.style.left = (pos / 1440 * 100) + "%";
+        $("b", h).textContent = clockLabel(t).replace(":00", "");
+      };
+      h.onpointermove = move;
+      h.onpointerup = h.onpointercancel = () => { h.onpointermove = null; dragging = 0; queueSave(true); };
+    };
+  });
+
+  $$(".sh-srow", panel).forEach(r => {
+    const i = +r.dataset.i, e = draft[i];
+    r.onclick = ev => { if (ev.target === r) { schedSel = i; showSig = ""; renderShow(); } };
+    $$("[data-step]", r).forEach(b => b.onclick = () => { e.time = fromMin(toMin(e.time) + +b.dataset.step); schedSel = i; queueSave(); });
+    $("[data-time]", r).onchange = ev => { if (ev.target.value) { e.time = ev.target.value; queueSave(true); } };
+    $("[data-mood]", r).onchange = ev => { e.mood = ev.target.value; e.fade = e.mood === "off" ? 60 : 30; queueSave(true); };
+    $("[data-days]", r).onchange = ev => {
+      const hit = DAY_SETS.find(d => d[0] === ev.target.value);
+      if (!hit) return;
+      e.days = hit[1] ? [...hit[1]] : [toMin(e.time) < NIGHT_START ? (schedDay + 1) % 7 : schedDay];
+      queueSave(true);
+    };
+    $("[data-del]", r).onclick = () => { draft.splice(i, 1); schedSel = -1; queueSave(true); };
+  });
+
+  $("#sh-addtime", panel).onclick = () => {
+    const last = tonight.length ? tonight[tonight.length - 1].e.time : "19:00";
+    const time = tonight.length ? fromMin(toMin(last) + 60) : "20:00";
+    const mood = $("#sh-addmood", panel).value;
+    draft.push({ time, mood, days: [], fade: mood === "off" ? 60 : 30 });
+    schedSel = draft.length - 1;
+    queueSave(true);
+  };
+
   $("#sh-savelook", panel).onclick = async () => {
     const name = $("#sh-lookname", panel).value.trim();
     if (!name) { $("#sh-lookname", panel).focus(); return; }
@@ -401,26 +514,42 @@ function renderSchedule(panel) {
     showSig = ""; renderShow();
   };
   $("#sh-lookname", panel).onkeydown = e => { if (e.key === "Enter") $("#sh-savelook", panel).click(); };
-  const st = $("#sh-starters", panel);
-  if (st) st.onclick = () => api("/api/mood/starters", {});
+  $("#sh-starters", panel).onclick = () => api("/api/mood/starters", {});
   $$("[data-play]", panel).forEach(b => b.onclick = () => api("/api/mood/play", { id: b.dataset.play, fade: 2 }));
   $$("[data-forget]", panel).forEach(b => b.onclick = async () => {
     if (lookDelArmed !== b.dataset.forget) { lookDelArmed = b.dataset.forget; showSig = ""; renderShow(); return; }
     lookDelArmed = "";
     await api("/api/mood/delete", { id: b.dataset.forget });
   });
-  $("#sh-addtime", panel).onclick = () => {
-    const sc2 = state.schedule;
-    const last = sc2.entries.length ? sc2.entries[sc2.entries.length - 1].time : "19:00";
-    const [h, m] = last.split(":").map(Number);
-    const time = `${String((h + 2) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-    const entries = scheduleRows(panel).concat([{ time, mood: moods.length ? moods[0].id : "off", days: [], fade: 30 }]);
-    let tzName = "";
-    try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
-    api("/api/schedule", { enabled: sc2.enabled, time_zone: sc2.time_zone || tzName, entries });
-  };
-  $$(".sh-srow", panel).forEach(r => {
-    $$("input, select", r).forEach(el => el.onchange = async () => { addingRow = false; await saveShowSchedule(panel); });
-    $("[data-del]", r).onclick = async () => { r.remove(); addingRow = false; await saveShowSchedule(panel); };
-  });
+}
+
+// ---------- phone ----------
+let phoneInfo = null;
+async function loadPhoneInfo() {
+  try { phoneInfo = await (await fetch("/api/remote")).json(); } catch (_) { phoneInfo = null; }
+  if (shSel === "phone") { showSig = ""; renderShow(); }
+}
+
+function renderPhone(panel) {
+  const r = phoneInfo;
+  let body;
+  if (!r) body = `<p class="sh-empty">Checking…</p>`;
+  else if (!r.pin && r.enabled) body = `<p class="sh-empty">You're on the phone remote now. Tip: tap Share, then <b>Add to Home Screen</b> to open it like an app.</p>`;
+  else if (!r.enabled) body = `
+    <ol class="ph-steps">
+      <li>Quit the app (close its Terminal window).</li>
+      <li>Start it with <b>START-WITH-PHONE.command</b> in the same folder instead.</li>
+      <li>Come back here: the address and PIN for your phone will show up.</li>
+    </ol>`;
+  else body = `
+    <ol class="ph-steps">
+      <li>Put your phone on the <b>same Wi-Fi</b> as this Mac.<br><span class="hint">No Wi-Fi? Turn on your phone's <b>Personal Hotspot</b> and join it from the Wi-Fi menu on the Mac. The lights keep working through the cable.</span></li>
+      <li>On the phone, open Safari and type:<div class="ph-urls">${(r.urls || []).map(u => `<code>${esc(u.replace(/^http:\/\//, ""))}</code>`).join("") || `<span class="hint">The Mac has no Wi-Fi address yet. Join a network or the hotspot, then check again.</span>`}</div></li>
+      <li>Enter the PIN <b class="ph-pin">${esc(r.pin)}</b></li>
+      <li>Tap Share, then <b>Add to Home Screen</b> to open it like an app next time.</li>
+    </ol>
+    <button class="sh-link" id="ph-again">Check the address again</button>`;
+  panel.innerHTML = `<div class="sh-phead"><div><h2>Use your phone</h2><p>Control the lights from your phone or iPad while this Mac stays plugged into the AN2.</p></div></div>${body}`;
+  const again = $("#ph-again", panel);
+  if (again) again.onclick = () => { phoneInfo = null; renderPhone(panel); loadPhoneInfo(); };
 }

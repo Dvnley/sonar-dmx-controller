@@ -72,7 +72,7 @@ func TestScheduleOccurrence(t *testing.T) {
 	c, now := newTest(t)
 	loc, _ := time.LoadLocation("America/New_York")
 	c.AddStarterMoods()
-	if len(c.cfg.Moods) != len(starters) || c.AddStarterMoods() != 0 {
+	if len(c.cfg.Moods) != len(starters)+len(showLooks) || c.AddStarterMoods() != 0 {
 		t.Fatalf("starters: %d", len(c.cfg.Moods))
 	}
 	chill, party := c.cfg.Moods[1].ID, c.cfg.Moods[3].ID

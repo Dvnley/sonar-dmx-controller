@@ -425,8 +425,12 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 	})
 	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}
-		if opts.URLs == nil {
+		urls := opts.URLs
+		if opts.LiveURLs != nil {
+			urls = opts.LiveURLs()
+		}
+		info := map[string]any{"enabled": opts.PIN != "", "urls": urls}
+		if urls == nil {
 			info["urls"] = []string{}
 		}
 		if isLocal(r) {

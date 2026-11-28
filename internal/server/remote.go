@@ -15,6 +15,9 @@ type Options struct {
 	PIN string
 	// URLs are the addresses another device can use to reach the UI.
 	URLs []string
+	// LiveURLs, when set, works the addresses out again on each request, so
+	// they stay right after the Mac joins another network (a phone hotspot).
+	LiveURLs func() []string
 }
 
 const pinCookie = "sonar_pin"

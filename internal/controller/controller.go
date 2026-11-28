@@ -183,6 +183,13 @@ func (c *Controller) changed() {
 	c.saveT = time.AfterFunc(300*time.Millisecond, func() { _ = c.Save() })
 }
 
+// TargetIP is the AN2's address.
+func (c *Controller) TargetIP() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg.TargetIP
+}
+
 // RemotePIN returns the PIN for remote devices, creating a 6-digit one the
 // first time.
 func (c *Controller) RemotePIN() string {

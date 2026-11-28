@@ -226,3 +226,37 @@ func TestOldSpiderGuessMovesToCheckedMap(t *testing.T) {
 		t.Fatalf("blue should be on 37: %v", fr[33:43])
 	}
 }
+
+func TestShowLooksGiveEachLightItsOwnJob(t *testing.T) {
+	c, _ := newTest(t)
+	if err := c.SetupRig(); err != nil {
+		t.Fatal(err)
+	}
+	c.AddStarterMoods()
+	id := ""
+	for _, m := range c.cfg.Moods {
+		if m.Name == "Disco fever" {
+			id = m.ID
+		}
+	}
+	if err := c.PlayMood(id, 0); err != nil {
+		t.Fatal(err)
+	}
+	s := c.State()
+	progs := map[string][]int{}
+	for _, r := range s.Perform.Runs {
+		progs[r.Program] = r.Fixtures
+	}
+	if len(progs["disco"]) != 1 || progs["disco"][0] != 6 || len(progs["rainbow"]) != 1 || progs["rainbow"][0] != 8 {
+		t.Fatalf("runs %v", progs)
+	}
+	if len(s.Show.Moves) != 1 || s.Show.Moves[0].Pattern != "figure8" || s.Show.Moves[0].Fixtures[0] != 7 {
+		t.Fatalf("moves %+v", s.Show.Moves)
+	}
+	if s.Fixtures[0].Enabled {
+		t.Fatal("uplights should stay off")
+	}
+	if c.Frames()[0][9] != 200 {
+		t.Fatal("spot pattern spin should be set")
+	}
+}

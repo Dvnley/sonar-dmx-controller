@@ -428,6 +428,7 @@ func (c *Controller) AddStarterMoods() int {
 		c.cfg.Moods = append(c.cfg.Moods, m)
 		added++
 	}
+	added += c.addShowLooks()
 	if added > 0 {
 		c.changed()
 	}

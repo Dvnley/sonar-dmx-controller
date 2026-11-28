@@ -62,19 +62,8 @@ func main() {
 		if opts.PIN == "" {
 			opts.PIN = ctl.RemotePIN()
 		}
-		if host, err := os.Hostname(); err == nil && host != "" {
-			if !strings.HasSuffix(host, ".local") {
-				host += ".local"
-			}
-			opts.URLs = append(opts.URLs, fmt.Sprintf("http://%s", net.JoinHostPort(host, port)))
-		}
-		target := net.ParseIP(ctl.State().TargetIP)
-		for _, n := range artnet.LocalIPv4s() {
-			if n.Contains(target) {
-				continue // the Art-Net link, not the Wi-Fi the iPad is on
-			}
-			opts.URLs = append(opts.URLs, fmt.Sprintf("http://%s", net.JoinHostPort(n.IP.String(), port)))
-		}
+		opts.LiveURLs = func() []string { return remoteURLs(ctl, port) }
+		opts.URLs = opts.LiveURLs()
 	}
 
 	ln, err := net.Listen("tcp", listen)
@@ -85,7 +74,7 @@ func main() {
 	url := "http://127.0.0.1:" + port
 	log.Printf("web UI: %s", url)
 	if *remote {
-		log.Printf("iPad remote is on. On the iPad, open one of these in Safari (same Wi-Fi as this Mac):")
+		log.Printf("Phone/iPad remote is on. On the phone, open one of these in the browser (same Wi-Fi or hotspot as this Mac):")
 		for _, u := range opts.URLs {
 			log.Printf("    %s", u)
 		}
@@ -110,6 +99,26 @@ func main() {
 	if err := ctl.Save(); err != nil {
 		log.Printf("save config: %v", err)
 	}
+}
+
+// remoteURLs are the addresses a phone or iPad can use: the Mac's .local name
+// and its IPv4 addresses, leaving out the Art-Net link to the AN2.
+func remoteURLs(ctl *controller.Controller, port string) []string {
+	var out []string
+	if host, err := os.Hostname(); err == nil && host != "" {
+		if !strings.HasSuffix(host, ".local") {
+			host += ".local"
+		}
+		out = append(out, fmt.Sprintf("http://%s", net.JoinHostPort(host, port)))
+	}
+	target := net.ParseIP(ctl.TargetIP())
+	for _, n := range artnet.LocalIPv4s() {
+		if n.Contains(target) {
+			continue // the Art-Net link, not the Wi-Fi the phone is on
+		}
+		out = append(out, fmt.Sprintf("http://%s", net.JoinHostPort(n.IP.String(), port)))
+	}
+	return out
 }
 
 func defaultConfigPath() string {
