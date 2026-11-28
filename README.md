@@ -96,6 +96,19 @@ If a light does the wrong thing, check it in **Channel sweep** and fix its
 channel map in the Patch tab or make a preset in **Fixture presets**. The old
 9CH spot profile is still there.
 
+## Auto mode
+
+The big **Auto** button on the Show tab lets the music run the lights. In the
+browser on the Mac it listens with the Mac's mic: quiet music gets slow, calm
+looks and loud music gets fast, busy ones. It changes look every phrase (32
+beats, or about 25 seconds), jumps straight to a big look when the music
+drops, and gives the room to the spots (a spotlight moment) when a loud part
+suddenly goes quiet. **Mic sensitivity** sets how loud counts as loud. With no
+mic (on a phone or iPad) Auto still changes looks by itself at the Speed
+slider's pace. Blackout still works while Auto is on; picking a look by hand,
+or the schedule playing one, turns Auto off. The mic has to stay on, so keep
+the browser page on the Mac open.
+
 ## Pages
 
 - **Show** (the default; the other tabs are behind **More**): pick a light at the top (or Everything) and the panel below shows only what that light can do. At the top:
@@ -169,6 +182,8 @@ channel map in the Patch tab or make a preset in **Fixture presets**. The old
   ArtPoll.
 
 ## API
+
+Auto: `POST /api/auto {on, sensitivity}`, `POST /api/auto/level {level}` (mic RMS 0-1, a few times a second).
 
 All POST bodies are JSON. Every POST returns the full state (like
 `GET /api/state`) or `{"error": "..."}` with status 400.

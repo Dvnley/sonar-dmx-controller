@@ -94,50 +94,58 @@ func (c *Controller) addShowLooks() int {
 		if exists {
 			continue
 		}
-		m := Mood{ID: c.newMoodID(sl.name), Name: sl.name, Master: sl.master, Motion: Motion{Speed: 35, Hold: 20}}
-		var washIdx, spiderIdx, spotIdx []int
-		for i, f := range c.cfg.Fixtures {
-			f.Values = append(fixture.Values(nil), f.Values...)
-			var part *lookPart
-			switch {
-			case f.Profile == "spider-10ch":
-				part = &sl.spider
-				spiderIdx = append(spiderIdx, i)
-			case f.HasColor() && f.Profile != UplightProfile:
-				part = &sl.wash
-				washIdx = append(washIdx, i)
-			case moves(f):
-				spotIdx = append(spotIdx, i)
-				f.Enabled = sl.spots.level > 0
-				f.Brightness = sl.spots.level
-				if d := f.Find(fixture.Dimmer); d >= 0 && f.Values[d] == 0 {
-					f.Values[d] = 255
-				}
-				if w := f.Find(fixture.Color); w >= 0 && sl.spots.wheel >= 0 {
-					f.Values[w] = uint8(sl.spots.wheel)
-				}
-				if g := f.Find(fixture.Gobo); g >= 0 && sl.spots.spin >= 0 {
-					f.Values[g] = uint8(sl.spots.spin)
-				}
-			}
-			if part != nil {
-				setRGB(&f, part.rgb[0], part.rgb[1], part.rgb[2])
-				f.Enabled, f.Brightness = part.level > 0, part.level
-			}
-			m.Fixtures = append(m.Fixtures, SceneFixture{Values: f.Values, Brightness: f.Brightness, Enabled: f.Enabled})
-		}
-		addRun := func(idx []int, p lookPart) {
-			if p.program != "" && len(idx) > 0 && p.level > 0 {
-				m.Runs = append(m.Runs, ProgramRun{Fixtures: idx, Program: p.program, Speed: p.speed, Size: p.size, Variation: p.variation})
-			}
-		}
-		addRun(washIdx, sl.wash)
-		addRun(spiderIdx, sl.spider)
-		if sl.spots.pattern != "" && len(spotIdx) > 0 && sl.spots.level > 0 {
-			m.Moves = append(m.Moves, MoveRun{Fixtures: spotIdx, Pattern: sl.spots.pattern, Speed: sl.spots.speed, Size: sl.spots.size})
-		}
+		m := c.buildLook(sl)
+		m.ID = c.newMoodID(sl.name)
 		c.cfg.Moods = append(c.cfg.Moods, m)
 		added++
 	}
 	return added
+}
+
+// buildLook must be called with mu held. It turns a show look into a mood
+// for the current patch.
+func (c *Controller) buildLook(sl showLook) Mood {
+	m := Mood{Name: sl.name, Master: sl.master, Motion: Motion{Speed: 35, Hold: 20}}
+	var washIdx, spiderIdx, spotIdx []int
+	for i, f := range c.cfg.Fixtures {
+		f.Values = append(fixture.Values(nil), f.Values...)
+		var part *lookPart
+		switch {
+		case f.Profile == "spider-10ch":
+			part = &sl.spider
+			spiderIdx = append(spiderIdx, i)
+		case f.HasColor() && f.Profile != UplightProfile:
+			part = &sl.wash
+			washIdx = append(washIdx, i)
+		case moves(f):
+			spotIdx = append(spotIdx, i)
+			f.Enabled = sl.spots.level > 0
+			f.Brightness = sl.spots.level
+			if d := f.Find(fixture.Dimmer); d >= 0 && f.Values[d] == 0 {
+				f.Values[d] = 255
+			}
+			if w := f.Find(fixture.Color); w >= 0 && sl.spots.wheel >= 0 {
+				f.Values[w] = uint8(sl.spots.wheel)
+			}
+			if g := f.Find(fixture.Gobo); g >= 0 && sl.spots.spin >= 0 {
+				f.Values[g] = uint8(sl.spots.spin)
+			}
+		}
+		if part != nil {
+			setRGB(&f, part.rgb[0], part.rgb[1], part.rgb[2])
+			f.Enabled, f.Brightness = part.level > 0, part.level
+		}
+		m.Fixtures = append(m.Fixtures, SceneFixture{Values: f.Values, Brightness: f.Brightness, Enabled: f.Enabled})
+	}
+	addRun := func(idx []int, p lookPart) {
+		if p.program != "" && len(idx) > 0 && p.level > 0 {
+			m.Runs = append(m.Runs, ProgramRun{Fixtures: idx, Program: p.program, Speed: p.speed, Size: p.size, Variation: p.variation})
+		}
+	}
+	addRun(washIdx, sl.wash)
+	addRun(spiderIdx, sl.spider)
+	if sl.spots.pattern != "" && len(spotIdx) > 0 && sl.spots.level > 0 {
+		m.Moves = append(m.Moves, MoveRun{Fixtures: spotIdx, Pattern: sl.spots.pattern, Speed: sl.spots.speed, Size: sl.spots.size})
+	}
+	return m
 }

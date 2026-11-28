@@ -238,6 +238,16 @@ func (c *Controller) PlayMood(id string, fadeSec float64) error {
 
 // applyMood must be called with mu held.
 func (c *Controller) applyMood(id string, fadeSec float64) {
+	c.auto.on = false // a mood picked by hand or by the schedule ends Auto
+	var m *Mood
+	if id != MoodOff {
+		m = &c.cfg.Moods[c.findMood(id)]
+	}
+	c.playMood(m, id, fadeSec)
+}
+
+// playMood must be called with mu held. A nil mood is Lights off.
+func (c *Controller) playMood(mp *Mood, id string, fadeSec float64) {
 	now := c.now()
 	if dur := time.Duration(math.Min(math.Max(fadeSec, 0), MaxMoodFade.Seconds()) * float64(time.Second)); dur > 0 && len(c.live) == len(c.cfg.Fixtures) {
 		from := make([]fixture.Fixture, len(c.live))
@@ -253,14 +263,14 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 	c.flashUntil, c.strobeHz, c.blackout = time.Time{}, 0, false
 	c.runs, c.rainbowSec, c.moves = nil, 0, nil
 	c.cycle, c.pulse, c.playingID, c.dark = nil, 0, id, false
-	if id == MoodOff {
+	if mp == nil {
 		// fade to dark, then hold a blackout (the Blackout button undoes it)
 		c.dark = true
 		c.playing = "Lights off"
 		c.changed()
 		return
 	}
-	m := c.cfg.Moods[c.findMood(id)]
+	m := *mp
 	for i, sf := range m.Fixtures {
 		if i >= len(c.cfg.Fixtures) {
 			break

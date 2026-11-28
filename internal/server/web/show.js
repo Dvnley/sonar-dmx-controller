@@ -127,6 +127,99 @@ $("#sh-stopall").onclick = async () => {
   window.addEventListener("blur", up);
 })();
 
+// ---------- auto: the mic runs the show ----------
+// The browser on the Mac measures how loud the room is and spots the kick
+// drum; the controller turns that into slow or fast, calm or busy looks.
+let autoMic = null, autoSensTouched = 0;
+async function autoMicStart() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  await ctx.resume();
+  const src = ctx.createMediaStreamSource(stream);
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 150;
+  const full = ctx.createScriptProcessor(1024, 1, 1);
+  const kick = ctx.createScriptProcessor(1024, 1, 1);
+  let sum = 0, n = 0, sent = 0, last = 0;
+  const hist = [];
+  full.onaudioprocess = ev => {
+    const d = ev.inputBuffer.getChannelData(0);
+    for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+    n += d.length;
+    const now = performance.now();
+    if (now - sent >= 250) {
+      sent = now;
+      const level = Math.sqrt(sum / Math.max(n, 1));
+      sum = 0; n = 0;
+      fetch("/api/auto/level", { method: "POST", body: JSON.stringify({ level }) }).catch(() => {});
+    }
+  };
+  kick.onaudioprocess = ev => {
+    const d = ev.inputBuffer.getChannelData(0);
+    let e = 0;
+    for (let i = 0; i < d.length; i++) e += d[i] * d[i];
+    e /= d.length;
+    const avg = hist.length ? hist.reduce((a, b) => a + b, 0) / hist.length : e;
+    hist.push(e);
+    if (hist.length > 43) hist.shift();
+    const now = performance.now();
+    if (hist.length > 20 && e > avg * 1.6 && e > 1e-5 && now - last > 280) {
+      last = now;
+      fetch("/api/beat", { method: "POST", body: '{"source":"mic"}' }).catch(() => {});
+    }
+  };
+  src.connect(full); full.connect(ctx.destination);
+  src.connect(lp); lp.connect(kick); kick.connect(ctx.destination);
+  return { stop() { full.disconnect(); kick.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close(); } };
+}
+$("#sh-autobtn").onclick = async () => {
+  const on = !(state && state.auto && state.auto.on);
+  if (on && micOK && !autoMic) {
+    try { autoMic = await autoMicStart(); } catch (e) { autoMic = null; }
+  }
+  if (!on && autoMic) { autoMic.stop(); autoMic = null; }
+  await api("/api/auto", { on });
+};
+$("#sh-autosens").oninput = e => {
+  autoSensTouched = Date.now();
+  $("#sh-autosensv").textContent = sensWord(+e.target.value);
+  throttled("autosens", () => api("/api/auto", { sensitivity: +e.target.value }));
+};
+function sensWord(v) { return v < 25 ? "Low" : v < 45 ? "Lower" : v <= 55 ? "Normal" : v <= 75 ? "Higher" : "High"; }
+
+function renderAuto() {
+  const a = state.auto;
+  if (!a) return;
+  $("#sh-auto").classList.toggle("on", a.on);
+  const btn = $("#sh-autobtn");
+  btn.classList.toggle("on", a.on);
+  btn.querySelector("b").textContent = a.on ? "Auto is on" : "Auto";
+  let sub = "Let the music run the lights";
+  if (a.on) sub = "Tap to stop";
+  $("#sh-autosub").textContent = sub;
+  $("#sh-autometer").style.width = (a.on ? a.energy : 0) + "%";
+  $("#sh-autometer").className = "lv" + (a.level === "Calm" ? 0 : a.level === "Groove" ? 1 : 2);
+  let txt;
+  if (!a.on) {
+    txt = micOK ? "Listens with this Mac's mic. Quiet music gets slow, calm looks; loud music gets fast, busy ones. It changes looks every phrase, and hits hard on a drop."
+      : "On this device Auto changes looks by itself at the Speed slider's pace. To have it follow the music, turn Auto on from the browser on the Mac.";
+  } else {
+    const moment = a.moment === "drop" ? " · Drop!" : a.moment === "spotlight" ? " · Spotlight moment" : "";
+    const hear = a.listening ? `${a.level} · ${esc(a.look)}${moment}` : `${esc(a.look)} · not hearing the mic, so it follows the Speed slider`;
+    txt = hear;
+    if (!a.listening && micOK && !autoMic) txt += ` <button id="sh-autolisten" class="sh-small">Listen with the mic</button>`;
+  }
+  const el = $("#sh-autotxt");
+  if (el.dataset.t !== txt) {
+    el.dataset.t = txt; el.innerHTML = txt;
+    const l = $("#sh-autolisten");
+    if (l) l.onclick = async () => { try { autoMic = await autoMicStart(); } catch (e) { showError("Could not open the mic: " + e.message); } };
+  }
+  if (Date.now() - autoSensTouched > 3000) { $("#sh-autosens").value = a.sensitivity; $("#sh-autosensv").textContent = sensWord(a.sensitivity); }
+  $(".sh-sens").classList.toggle("hidden", !micOK);
+  if (!a.on && autoMic) { autoMic.stop(); autoMic = null; }
+}
+
 // ---------- render ----------
 function renderShow() {
   if (tab !== "show" || !state || !state.show) return;
@@ -144,6 +237,7 @@ function renderShow() {
   }
 
   // things that change often are updated in place
+  renderAuto();
   const m = $("#sh-master");
   if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master + "%"; }
   if (Date.now() - speedTouched > 3000) {

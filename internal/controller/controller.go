@@ -80,6 +80,7 @@ type Controller struct {
 	testFrom time.Time
 	sweep    *Sweep
 	manual   map[int]map[int]uint8 // hand faders: universe -> channel -> value
+	auto     autoState
 	sendErr  string
 	saveT    *time.Timer
 
@@ -119,6 +120,7 @@ var testColors = []string{"red", "green", "blue", "white"}
 // New loads the config at path, or starts from DefaultConfig if it is missing.
 func New(path string, sender Sender) (*Controller, error) {
 	c := &Controller{cfg: DefaultConfig(), path: path, Net: sender, now: time.Now, fades: map[int]*fade{}}
+	c.auto.sensitivity = 50
 	if path != "" {
 		data, err := os.ReadFile(path)
 		switch {
@@ -290,6 +292,8 @@ func (c *Controller) Run(ctx context.Context) {
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	poll := time.NewTicker(3 * time.Second)
 	sched := time.NewTicker(time.Second)
+	auto := time.NewTicker(250 * time.Millisecond)
+	defer auto.Stop()
 	defer tick.Stop()
 	defer poll.Stop()
 	defer sched.Stop()
@@ -305,6 +309,8 @@ func (c *Controller) Run(ctx context.Context) {
 			c.Poll()
 		case <-sched.C:
 			c.CheckSchedule()
+		case <-auto.C:
+			c.autoTick()
 		}
 	}
 }
@@ -446,6 +452,7 @@ type State struct {
 	Schedule    ScheduleState         `json:"schedule"`
 	Show        ShowState             `json:"show"`
 	Faders      FaderState            `json:"faders"`
+	Auto        AutoState             `json:"auto"`
 }
 
 // State snapshots everything the UI needs.
@@ -458,7 +465,7 @@ func (c *Controller) State() State {
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
 		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
-		Show: c.showState(), Faders: c.faderState(),
+		Show: c.showState(), Faders: c.faderState(), Auto: c.autoInfo(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}

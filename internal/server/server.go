@@ -257,6 +257,25 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 		result(w, c, err)
 	})
+	mux.HandleFunc("POST /api/auto", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On          *bool `json:"on"`
+			Sensitivity *int  `json:"sensitivity"`
+		}
+		if decode(w, r, &body) {
+			c.SetAuto(body.On, body.Sensitivity)
+			result(w, c, nil)
+		}
+	})
+	mux.HandleFunc("POST /api/auto/level", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Level float64 `json:"level"`
+		}
+		if decode(w, r, &body) {
+			c.AutoLevel(body.Level)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	mux.HandleFunc("POST /api/beat", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Source string `json:"source"`
