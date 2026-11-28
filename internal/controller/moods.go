@@ -90,13 +90,14 @@ type Occurrence struct {
 // ScheduleState is the schedule part of GET /api/state.
 type ScheduleState struct {
 	Schedule
-	Now      string      `json:"now"`
-	Zone     string      `json:"zone"`
-	Current  *Occurrence `json:"current"`
-	Next     *Occurrence `json:"next"`
-	Playing  string      `json:"playing"` // name of the last mood played, by hand or by the schedule
-	ByHand   bool        `json:"by_hand"` // the last mood was picked by hand, not by the schedule
-	Problems []string    `json:"problems"`
+	Now       string      `json:"now"`
+	Zone      string      `json:"zone"`
+	Current   *Occurrence `json:"current"`
+	Next      *Occurrence `json:"next"`
+	PlayingID string      `json:"playing_id"`
+	Playing   string      `json:"playing"` // name of the last mood played, by hand or by the schedule
+	ByHand    bool        `json:"by_hand"` // the last mood was picked by hand, not by the schedule
+	Problems  []string    `json:"problems"`
 }
 
 func (c *Controller) findMood(id string) int {
@@ -596,7 +597,7 @@ func (c *Controller) scheduleState() ScheduleState {
 	now := c.now()
 	loc := c.schedLocation()
 	s := ScheduleState{Schedule: c.cfg.Schedule, Now: now.In(loc).Format("Mon 3:04 PM"), Zone: loc.String(),
-		Playing: c.playing, ByHand: c.moodByHand, Problems: []string{}}
+		Playing: c.playing, PlayingID: c.playingID, ByHand: c.moodByHand, Problems: []string{}}
 	if s.Entries == nil {
 		s.Entries = []ScheduleEntry{}
 	}
@@ -645,6 +646,10 @@ func (c *Controller) moodInfos() []MoodInfo {
 			case "fire":
 				add("rgb(255,30,0)")
 				add("rgb(255,140,0)")
+			case "water":
+				add("rgb(0,25,255)")
+				add("rgb(0,150,255)")
+				add("rgb(235,245,255)")
 			case "ocean":
 				add("rgb(0,30,255)")
 				add("rgb(0,220,180)")

@@ -27,7 +27,7 @@ var Programs = []ProgramInfo{
 	{"wave", "Wave"}, {"pulse", "Pulse"}, {"strobe", "Strobe pop"}, {"police", "Police"},
 	{"fire", "Fire"}, {"sparkle", "Sparkle"},
 	{"breathe", "Breathe"}, {"heartbeat", "Heartbeat"}, {"lightning", "Lightning"},
-	{"ocean", "Ocean"}, {"sunset", "Sunset"}, {"disco", "Disco"},
+	{"ocean", "Ocean"}, {"sunset", "Sunset"}, {"disco", "Disco"}, {"water", "Water"},
 }
 
 // Palettes are the program variations.
@@ -242,6 +242,9 @@ func (c *Controller) applyPrograms(fixtures []fixture.Fixture, now time.Time) {
 			f := fixtures[i]
 			f.Values = append(fixture.Values(nil), f.Values...)
 			setRGB(&f, scale8(rgb[0], level), scale8(rgb[1], level), scale8(rgb[2], level))
+			if r.Program == "water" {
+				whiteFromRGB(&f) // the crests use a real white channel when there is one
+			}
 			fixtures[i] = f
 		}
 	}
@@ -329,6 +332,19 @@ func programColor(r *ProgramRun, pos float64, k, n int) ([3]uint8, float64) {
 		x := 0.5 + 0.5*math.Sin(2*math.Pi*(pos/10-off)) // color
 		y := 0.55 + 0.45*math.Sin(2*math.Pi*(pos/6-off*0.7)+1)
 		return mixRGB([3]uint8{0, 30, 255}, [3]uint8{0, 220, 180}, x), y
+	case "water":
+		// rippling water: three waves at odd speeds cross the rig in
+		// different directions, so blue rolls between the lights and white
+		// flickers where the crests meet, like light through a pool
+		w := math.Max(spread, 0.6)
+		o := float64(k) / float64(max(n, 1)) * w
+		s := math.Sin(2*math.Pi*(pos/3-o*1.3)) + math.Sin(2*math.Pi*(pos/4.7+o*0.8)+1.7) +
+			0.6*math.Sin(2*math.Pi*(pos*0.9-o*2.1)+float64(k))
+		c := clampF((s+2.6)/5.2, 0, 1)
+		col := mixRGB([3]uint8{0, 25, 255}, [3]uint8{0, 150, 255}, c)
+		crest := math.Pow(c, 4)
+		col = mixRGB(col, [3]uint8{235, 245, 255}, crest*1.4)
+		return col, 0.4 + 0.6*c
 	case "sunset":
 		// a long slow drift through warm colors
 		sun := [][3]uint8{{255, 140, 0}, {255, 50, 0}, {255, 0, 60}, {170, 0, 200}, {255, 50, 0}}
@@ -349,6 +365,19 @@ func programColor(r *ProgramRun, pos float64, k, n int) ([3]uint8, float64) {
 		return at(pos/8 + off*float64(len(pal))), 0.6
 	}
 	return [3]uint8{}, 0
+}
+
+// whiteFromRGB moves the white part of a color onto the white channel.
+func whiteFromRGB(f *fixture.Fixture) {
+	w, r, g, b := f.Find(fixture.White), f.Find(fixture.Red), f.Find(fixture.Green), f.Find(fixture.Blue)
+	if w < 0 || r < 0 || g < 0 || b < 0 {
+		return
+	}
+	m := min(f.Values[r], f.Values[g], f.Values[b])
+	f.Values[w] = m
+	f.Values[r] -= m
+	f.Values[g] -= m
+	f.Values[b] -= m
 }
 
 // noise is a cheap deterministic 0-1 hash for flicker effects.

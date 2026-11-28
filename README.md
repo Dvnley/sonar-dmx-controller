@@ -109,6 +109,21 @@ slider's pace. Blackout still works while Auto is on; picking a look by hand,
 or the schedule playing one, turns Auto off. The mic has to stay on, so keep
 the browser page on the Mac open.
 
+While it listens, a live picture shows what the mic hears: the bars are the
+sound from bass to treble, the white line is the loudness, the dot flashes on
+each hit and the big circle pulses on each beat, with the BPM underneath. If
+it says it can't hear anything, turn the music up, move the Mac nearer or
+raise the sensitivity. The beat finder only sends steady beats, so a noisy
+room doesn't make the lights stutter.
+
+On the Show tab the **Looks** row plays any saved look with one tap
+(**+ New looks** adds ready-made ones you don't have yet, such as *Under
+water*). Keys on the Mac: **A** Auto, **B** Blackout, **F** Flash (hold),
+**S** Strobe, **1-9** the first nine looks.
+
+The **Water** effect ripples blue and white through the lights, with the
+white crests on the spider's own white channel.
+
 ## Pages
 
 - **Show** (the default; the other tabs are behind **More**): pick a light at the top (or Everything) and the panel below shows only what that light can do. At the top:

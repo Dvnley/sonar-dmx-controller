@@ -128,54 +128,177 @@ $("#sh-stopall").onclick = async () => {
 })();
 
 // ---------- auto: the mic runs the show ----------
-// The browser on the Mac measures how loud the room is and spots the kick
-// drum; the controller turns that into slow or fast, calm or busy looks.
+// The browser on the Mac listens. It measures how loud the room is, finds the
+// kick and snare hits (spectral flux with a moving threshold), works out the
+// tempo from the gaps between hits, and keeps its own beat clock that only
+// sends steady beats to the controller. The controller turns loudness and
+// beats into slow or fast, calm or busy looks. The meter draws what it hears.
 let autoMic = null, autoSensTouched = 0;
+const micView = { level: 0, bands: new Array(24).fill(0), bpm: 0, conf: 0, beatAt: 0, hitAt: 0, quietFor: 0, heard: 0 };
+
 async function autoMicStart() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  await ctx.resume();
+  if (ctx.state === "suspended") await ctx.resume();
   const src = ctx.createMediaStreamSource(stream);
-  const lp = ctx.createBiquadFilter();
-  lp.type = "lowpass"; lp.frequency.value = 150;
-  const full = ctx.createScriptProcessor(1024, 1, 1);
-  const kick = ctx.createScriptProcessor(1024, 1, 1);
-  let sum = 0, n = 0, sent = 0, last = 0;
-  const hist = [];
-  full.onaudioprocess = ev => {
-    const d = ev.inputBuffer.getChannelData(0);
-    for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
-    n += d.length;
+  const an = ctx.createAnalyser();
+  an.fftSize = 1024; an.smoothingTimeConstant = 0;
+  const proc = ctx.createScriptProcessor(512, 1, 1);
+  const sr = ctx.sampleRate, binHz = sr / an.fftSize;
+  const spec = new Float32Array(an.frequencyBinCount), prev = new Float32Array(an.frequencyBinCount);
+  const lo = Math.max(1, Math.round(40 / binHz)), hi = Math.round(4000 / binHz);
+  // 24 log-spaced bands, 40 Hz - 12 kHz, for the picture
+  const edges = [];
+  for (let i = 0; i <= 24; i++) edges.push(Math.max(1, Math.round(40 * Math.pow(300, i / 24) / binHz)));
+  const fluxHist = [], onsets = [];
+  let sum = 0, n = 0, sent = 0, lastOnset = 0, lastFlux = 0, rising = false;
+  let period = 0, nextBeat = 0;
+  const dt = 512 / sr * 1000;
+  proc.onaudioprocess = ev => {
     const now = performance.now();
+    const d = ev.inputBuffer.getChannelData(0);
+    let e = 0;
+    for (let i = 0; i < d.length; i++) e += d[i] * d[i];
+    sum += e; n += d.length;
+    const rms = Math.sqrt(e / d.length);
+    micView.level = Math.max(rms, micView.level * 0.9);
+    // spectrum and flux
+    an.getFloatFrequencyData(spec);
+    let flux = 0;
+    for (let i = lo; i < hi; i++) {
+      const m = Math.max(spec[i], -100);
+      const diff = m - prev[i];
+      if (diff > 0) flux += diff * (i < 10 ? 2 : 1); // weigh the kick drum
+      prev[i] = m;
+    }
+    for (let b = 0; b < 24; b++) {
+      let mx = -100;
+      for (let i = edges[b]; i < Math.max(edges[b + 1], edges[b] + 1) && i < spec.length; i++) mx = Math.max(mx, spec[i]);
+      const v = Math.min(1, Math.max(0, (mx + 90) / 70));
+      micView.bands[b] = Math.max(v, micView.bands[b] * 0.85);
+    }
+    fluxHist.push(flux);
+    if (fluxHist.length > 150) fluxHist.shift(); // about 1.5 s
+    const sorted = fluxHist.slice().sort((a, b) => a - b);
+    const med = sorted[sorted.length >> 1] || 0;
+    const thr = med * 1.6 + 30;
+    // a hit is a peak in the flux above the moving threshold
+    if (flux > lastFlux) rising = true;
+    else if (rising) {
+      rising = false;
+      if (lastFlux > thr && now - lastOnset > 220 && rms > 0.002) {
+        lastOnset = now; micView.hitAt = now;
+        onsets.push(now);
+        while (onsets.length && now - onsets[0] > 10000) onsets.shift();
+        tempo();
+        // pull the beat clock towards the hit when it lands near a beat
+        if (period && Math.abs(now - nextBeat) < period * 0.2) nextBeat = nextBeat + (now - nextBeat) * 0.5;
+        else if (period && Math.abs(now - (nextBeat - period)) < period * 0.2) nextBeat = now + period;
+      }
+    }
+    lastFlux = flux;
+    // the beat clock: only steady beats go to the controller
+    if (period && now >= nextBeat) {
+      if (micView.conf >= 0.35 && now - lastOnset < 3000) {
+        micView.beatAt = now;
+        fetch("/api/beat", { method: "POST", body: '{"source":"mic"}' }).catch(() => {});
+      }
+      nextBeat += period;
+      if (nextBeat < now) nextBeat = now + period;
+    }
+    micView.quietFor = rms < 0.0015 ? micView.quietFor + dt : 0;
     if (now - sent >= 250) {
       sent = now;
       const level = Math.sqrt(sum / Math.max(n, 1));
       sum = 0; n = 0;
+      micView.heard = now;
       fetch("/api/auto/level", { method: "POST", body: JSON.stringify({ level }) }).catch(() => {});
     }
   };
-  kick.onaudioprocess = ev => {
-    const d = ev.inputBuffer.getChannelData(0);
-    let e = 0;
-    for (let i = 0; i < d.length; i++) e += d[i] * d[i];
-    e /= d.length;
-    const avg = hist.length ? hist.reduce((a, b) => a + b, 0) / hist.length : e;
-    hist.push(e);
-    if (hist.length > 43) hist.shift();
-    const now = performance.now();
-    if (hist.length > 20 && e > avg * 1.6 && e > 1e-5 && now - last > 280) {
-      last = now;
-      fetch("/api/beat", { method: "POST", body: '{"source":"mic"}' }).catch(() => {});
+  // tempo: score the gaps between nearby hits, folded into 80-160 BPM by
+  // halving (never by thirds, which mistakes 124 BPM for 83)
+  function tempo() {
+    const score = new Float32Array(81); // 80..160 BPM
+    let total = 0;
+    for (let i = 0; i < onsets.length; i++) {
+      for (let j = i + 1; j < onsets.length && j <= i + 2; j++) {
+        const gap = onsets[j] - onsets[i];
+        for (const k of [0.5, 1, 2, 4]) {
+          const g = gap / k;
+          if (g < 375 || g > 750) continue;
+          const bpm = 60000 / g;
+          const at = bpm - 80;
+          for (let b = Math.max(0, Math.floor(at) - 2); b <= Math.min(80, Math.ceil(at) + 2); b++) score[b] += Math.exp(-((b - at) ** 2) / 2) * (k === 1 ? 1 : 0.5);
+          total += k === 1 ? 1 : 0.5;
+          break;
+        }
+      }
     }
-  };
-  src.connect(full); full.connect(ctx.destination);
-  src.connect(lp); lp.connect(kick); kick.connect(ctx.destination);
-  return { stop() { full.disconnect(); kick.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close(); } };
+    let best = 0;
+    for (let b = 1; b <= 80; b++) if (score[b] > score[best]) best = b;
+    if (!total) { micView.conf = 0; return; }
+    micView.conf = Math.min(1, score[best] / total * 2.5);
+    // keep the current tempo unless another one clearly wins
+    if (micView.bpm && Math.abs(best + 80 - micView.bpm) > 2) {
+      const cur = Math.round(micView.bpm - 80);
+      if (cur >= 0 && cur <= 80 && score[cur] > score[best] * 0.75) best = cur;
+    }
+    const bpm = 80 + best;
+    if (micView.conf >= 0.35) {
+      const p = 60000 / bpm;
+      if (!period || Math.abs(p - period) > period * 0.04) { period = p; nextBeat = performance.now() + p; }
+      micView.bpm = bpm;
+    }
+  }
+  src.connect(an); src.connect(proc); proc.connect(ctx.destination);
+  return { stop() { proc.disconnect(); an.disconnect(); src.disconnect(); stream.getTracks().forEach(t => t.stop()); ctx.close(); micView.bpm = 0; micView.conf = 0; } };
 }
+
+// the picture of what the mic hears
+(function drawMic() {
+  requestAnimationFrame(drawMic);
+  const cv = $("#sh-viz");
+  if (!cv || tab !== "show") return;
+  const on = !!autoMic;
+  cv.parentElement.classList.toggle("hidden", !on);
+  if (!on) return;
+  const w = cv.clientWidth, h = cv.clientHeight, r = window.devicePixelRatio || 1;
+  if (cv.width !== Math.round(w * r)) { cv.width = Math.round(w * r); cv.height = Math.round(h * r); }
+  const g = cv.getContext("2d");
+  g.setTransform(r, 0, 0, r, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const now = performance.now();
+  const beat = Math.max(0, 1 - (now - micView.beatAt) / 250);
+  const hit = Math.max(0, 1 - (now - micView.hitAt) / 150);
+  // beat light
+  const cx = 26, cy = h / 2;
+  g.beginPath(); g.arc(cx, cy, 14 + beat * 6, 0, 7);
+  g.fillStyle = beat > 0 ? `rgba(241,7,163,${0.35 + beat * 0.65})` : "#2a2f3a"; g.fill();
+  g.beginPath(); g.arc(cx, cy, 5, 0, 7); g.fillStyle = hit > 0 ? "#fff" : "#4a5060"; g.fill();
+  // spectrum
+  const x0 = 56, bw = (w - x0 - 8) / 24;
+  for (let b = 0; b < 24; b++) {
+    const v = micView.bands[b];
+    const bh = Math.max(2, v * (h - 10));
+    g.fillStyle = `hsl(${260 - b * 9}, 85%, ${45 + v * 20}%)`;
+    g.fillRect(x0 + b * bw + 1, h - 5 - bh, bw - 2, bh);
+  }
+  // loudness line
+  const lv = Math.min(1, Math.max(0, (20 * Math.log10(Math.max(micView.level, 1e-5)) + 60) / 60));
+  g.fillStyle = "rgba(255,255,255,.85)";
+  g.fillRect(x0, 2, (w - x0 - 8) * lv, 3);
+  // words
+  const t = $("#sh-vizt");
+  const say = micView.quietFor > 4000 ? "Can't hear anything. Turn the music up, move the Mac nearer, or raise the mic sensitivity."
+    : micView.bpm && micView.conf >= 0.35 ? `Hearing the beat · ${micView.bpm} BPM`
+    : micView.level > 0.003 ? "Hearing music, finding the beat…" : "Listening…";
+  if (t.textContent !== say) t.textContent = say;
+})();
+
 $("#sh-autobtn").onclick = async () => {
   const on = !(state && state.auto && state.auto.on);
   if (on && micOK && !autoMic) {
-    try { autoMic = await autoMicStart(); } catch (e) { autoMic = null; }
+    try { autoMic = await autoMicStart(); } catch (e) { autoMic = null; showError("Could not open the mic: " + e.message + ". In Safari, allow the microphone for this page (Safari › Settings for This Website)."); }
   }
   if (!on && autoMic) { autoMic.stop(); autoMic = null; }
   await api("/api/auto", { on });
@@ -194,19 +317,16 @@ function renderAuto() {
   const btn = $("#sh-autobtn");
   btn.classList.toggle("on", a.on);
   btn.querySelector("b").textContent = a.on ? "Auto is on" : "Auto";
-  let sub = "Let the music run the lights";
-  if (a.on) sub = "Tap to stop";
-  $("#sh-autosub").textContent = sub;
+  $("#sh-autosub").textContent = a.on ? "Tap to stop" : "Let the music run the lights";
   $("#sh-autometer").style.width = (a.on ? a.energy : 0) + "%";
   $("#sh-autometer").className = "lv" + (a.level === "Calm" ? 0 : a.level === "Groove" ? 1 : 2);
   let txt;
   if (!a.on) {
-    txt = micOK ? "Listens with this Mac's mic. Quiet music gets slow, calm looks; loud music gets fast, busy ones. It changes looks every phrase, and hits hard on a drop."
-      : "On this device Auto changes looks by itself at the Speed slider's pace. To have it follow the music, turn Auto on from the browser on the Mac.";
+    txt = micOK ? "Plays music to the Mac's mic: quiet parts get slow, calm looks; loud parts get fast, busy ones. New look every phrase, a big hit on the drop."
+      : "On this device Auto changes looks by itself at the Speed slider's pace. For it to follow the music, turn Auto on from the browser on the Mac.";
   } else {
     const moment = a.moment === "drop" ? " · Drop!" : a.moment === "spotlight" ? " · Spotlight moment" : "";
-    const hear = a.listening ? `${a.level} · ${esc(a.look)}${moment}` : `${esc(a.look)} · not hearing the mic, so it follows the Speed slider`;
-    txt = hear;
+    txt = a.listening ? `${a.level} · ${esc(a.look)}${moment}` : `${esc(a.look)} · not listening, so it follows the Speed slider`;
     if (!a.listening && micOK && !autoMic) txt += ` <button id="sh-autolisten" class="sh-small">Listen with the mic</button>`;
   }
   const el = $("#sh-autotxt");
@@ -219,6 +339,47 @@ function renderAuto() {
   $(".sh-sens").classList.toggle("hidden", !micOK);
   if (!a.on && autoMic) { autoMic.stop(); autoMic = null; }
 }
+
+// ---------- quick looks, tips and keys ----------
+let qlooksSig = "";
+function renderQuickLooks() {
+  const el = $("#sh-qlooks");
+  const playing = state.schedule.playing_id, auto = !!(state.auto && state.auto.on);
+  const sig = JSON.stringify([state.moods.map(m => [m.id, m.name, m.colors]), playing, auto]);
+  if (sig === qlooksSig) return;
+  qlooksSig = sig;
+  if (!state.moods.length) {
+    el.innerHTML = `<span class="sh-qhead">Looks</span><button id="sh-addlooks" class="primary">Add the ready-made looks</button>`;
+    $("#sh-addlooks").onclick = () => api("/api/mood/starters", {});
+    return;
+  }
+  el.innerHTML = `<span class="sh-qhead">Looks</span>` + state.moods.map((m, i) => `
+    <button class="sh-qlook${m.id === playing && !auto ? " on" : ""}" data-qlook="${esc(m.id)}">
+      ${i < 9 ? `<small>${i + 1}</small>` : ""}<span class="sh-qdots">${(m.colors || []).slice(0, 4).map(c => `<i style="background:${esc(c)}"></i>`).join("")}</span>${esc(m.name)}
+    </button>`).join("") + `<button class="sh-qlook sh-qmore" id="sh-morelooks" title="Adds any ready-made looks you don't have yet">+ New looks</button>`;
+  $("#sh-morelooks").onclick = () => api("/api/mood/starters", {});
+  $$("[data-qlook]", el).forEach(b => b.onclick = () => playLook(b.dataset.qlook));
+}
+function playLook(id) { api("/api/mood/play", { id, fade: 1.5 }); }
+
+if (!loadPref("tipsdone", false)) $("#sh-tips").classList.remove("hidden");
+$("#sh-tipsok").onclick = () => { savePref("tipsdone", true); $("#sh-tips").classList.add("hidden"); };
+
+document.addEventListener("keydown", e => {
+  if (tab !== "show" || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (k === "a") { if (!e.repeat) $("#sh-autobtn").click(); }
+  else if (k === "b") { if (!e.repeat) $("#sh-blackout").click(); }
+  else if (k === "s") { if (!e.repeat) $("#sh-strobe").click(); }
+  else if (k === "f") { if (!e.repeat) { $("#sh-flash").classList.add("on"); api("/api/flash", { on: true }); } }
+  else if (/^[1-9]$/.test(k)) { if (state && state.moods[+k - 1]) playLook(state.moods[+k - 1].id); }
+  else return;
+  e.preventDefault();
+});
+document.addEventListener("keyup", e => {
+  if (tab === "show" && e.key.toLowerCase() === "f") { $("#sh-flash").classList.remove("on"); api("/api/flash", { on: false }); }
+});
 
 // ---------- render ----------
 function renderShow() {
@@ -238,6 +399,7 @@ function renderShow() {
 
   // things that change often are updated in place
   renderAuto();
+  renderQuickLooks();
   const m = $("#sh-master");
   if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master + "%"; }
   if (Date.now() - speedTouched > 3000) {

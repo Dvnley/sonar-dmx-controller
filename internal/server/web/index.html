@@ -38,11 +38,26 @@
   <div id="sh-conn" class="fd-conn hidden"></div>
   <div id="sh-rig" class="sh-rig hidden"></div>
 
+  <div class="sh-tips hidden" id="sh-tips">
+    <div>
+      <b>Quick start</b>
+      <ol>
+        <li><b>Tap a look</b> in the row below to play it.</li>
+        <li>Or tap <b>Auto</b> and play music: the lights follow it by themselves.</li>
+        <li>Tap <b>Spots</b>, <b>Chauvet wash</b> or <b>Spider</b> to change just that light.</li>
+        <li><b>Schedule</b> runs a whole night on its own.</li>
+      </ol>
+      <p class="sh-keys">Keys on the Mac: <kbd>A</kbd> Auto · <kbd>B</kbd> Blackout · <kbd>F</kbd> Flash (hold) · <kbd>S</kbd> Strobe · <kbd>1</kbd>–<kbd>9</kbd> looks</p>
+    </div>
+    <button id="sh-tipsok" class="primary">Got it</button>
+  </div>
+
   <div class="sh-auto" id="sh-auto">
     <button id="sh-autobtn" class="sh-autobtn"><b>Auto</b><small id="sh-autosub">Let the music run the lights</small></button>
     <div class="sh-autoinfo">
       <div class="sh-meter"><i id="sh-autometer"></i></div>
       <div id="sh-autotxt" class="sh-autotxt"></div>
+      <div class="sh-viz hidden"><canvas id="sh-viz"></canvas><span id="sh-vizt"></span></div>
       <label class="sh-sens"><span>Mic sensitivity</span><input id="sh-autosens" type="range" min="0" max="100"><b id="sh-autosensv"></b></label>
     </div>
   </div>
@@ -52,6 +67,8 @@
     <label class="sh-dial"><span>Brightness</span><input id="sh-master" type="range" min="0" max="100"><b id="sh-masterv"></b></label>
     <label class="sh-dial"><span>Speed</span><input id="sh-speed" type="range" min="0" max="100"><b id="sh-speedword"></b></label>
   </div>
+
+  <div class="sh-qlooks" id="sh-qlooks"></div>
 
   <div class="sh-lights" id="sh-lights"></div>
 

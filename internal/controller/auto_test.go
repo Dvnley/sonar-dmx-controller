@@ -93,3 +93,27 @@ func TestAutoWithoutMicStillChangesLooks(t *testing.T) {
 		t.Fatalf("looks %v", seen)
 	}
 }
+
+func TestWaterUsesTheSpiderWhite(t *testing.T) {
+	c, now := newTest(t)
+	if err := c.SetupRig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.StartProgram([]int{0, 2}, ProgramRun{Program: "water", Speed: 50, Size: 100}); err != nil {
+		t.Fatal(err)
+	}
+	whites, blues := 0, 0
+	for i := 0; i < 400; i++ {
+		*now = now.Add(50 * time.Millisecond)
+		f := c.Frames()[0]
+		if f[37] > 100 { // spider white (ch 5 at 34)
+			whites++
+		}
+		if f[18] > 150 { // wash blue (ch 3 at 17)
+			blues++
+		}
+	}
+	if whites == 0 || blues < 100 {
+		t.Fatalf("whites %d, blues %d", whites, blues)
+	}
+}

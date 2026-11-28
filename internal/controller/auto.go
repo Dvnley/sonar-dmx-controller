@@ -17,8 +17,8 @@ import (
 
 // The looks Auto picks from, by energy.
 var autoTiers = [3][]string{
-	{"Ocean floor", "Sunset lounge", "Cool breeze", "Fire pit"},
-	{"Heartbeat", "Pink party", "Fire pit", "Cool breeze", "Spotlight show"},
+	{"Ocean floor", "Sunset lounge", "Cool breeze", "Fire pit", "Under water"},
+	{"Heartbeat", "Pink party", "Fire pit", "Under water", "Spotlight show"},
 	{"Disco fever", "Thunderstorm", "Police raid", "Pink party"},
 }
 
@@ -154,14 +154,18 @@ func (c *Controller) autoTick() {
 	listening := c.autoListening(now)
 	var jump float64
 	if listening {
-		gain := math.Pow(2, (float64(a.sensitivity)-50)/35) // about 0.4x to 2.7x
-		quiet := 0.003 / gain                               // below this the room is silent
+		// Loudness in decibels below the recent peak: about 15 dB of range at
+		// normal sensitivity, so a verse sits in the middle and the chorus at
+		// the top. Higher sensitivity widens the range (quieter counts more).
+		span := 8 + 0.14*float64(a.sensitivity)
+		quiet := 0.0015 * math.Pow(2, (50-float64(a.sensitivity))/25) // room silence
+		db := func(v float64) float64 { return 20 * math.Log10(math.Max(v, 1e-6)) }
 		if a.peak < quiet || a.fast < quiet {
 			target = 0
 		} else {
-			target = clampF(math.Pow(a.fast/a.peak, 1.5)*gain*1.1, 0, 1)
+			target = clampF(1-(db(a.peak)-db(a.fast))/span, 0, 1)
 		}
-		jump = (a.fast - a.slow) / math.Max(a.peak, quiet)
+		jump = (db(a.fast) - db(math.Max(a.slow, quiet))) / span
 	}
 	a.energy += (target - a.energy) * (1 - math.Exp(-dt/1.5))
 
