@@ -127,14 +127,15 @@ var Profiles = []Profile{
 		}}},
 	},
 	{
-		ID: "spider-10ch", Name: "Spider moving wash", Kind: "moving",
-		Notes: "8-eye RGBW spider in 10CH mode. This channel layout is the most common one for these lights but is a GUESS: " +
-			"check it with the channel sweep and fix it in the Patch tab.",
+		ID: "spider-10ch", Name: "Spider wash", Kind: "color",
+		Notes: "Danley's spiders, 10CH, checked on the rig: 2 red, 3 green, 4 blue, 5 white, 6 amber, 7 UV, 8 strobe, 9 party/auto. " +
+			"Channels 1 and 10 did nothing visible in the check.",
 		Modes: []Mode{{Name: "10CH", Channels: []Channel{
-			ch("Left bar tilt", Tilt, 128), ch("Right bar tilt", Tilt, 128),
-			ch("Brightness", Dimmer, 255), ch("Strobe", Shutter, 0),
-			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0), ch("White", White, 0),
-			ch("Move speed", Speed, 0), ch("Auto/sound", Auto, 0),
+			ch("Ch 1 (not checked)", Generic, 128),
+			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0),
+			ch("White", White, 0), ch("Amber", Amber, 0), ch("UV", UV, 0),
+			ch("Strobe", Shutter, 0), ch("Party mode", Auto, 0),
+			ch("Ch 10 (not checked)", Generic, 0),
 		}}},
 	},
 	{

@@ -304,7 +304,7 @@ function renderLight(panel, g) {
     chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") aim += chanSlider(g, ch, i); });
     html += section("Where it points", aim + `<button class="sh-link" data-center>Point at the middle</button>`, move ? "it moves around this spot" : "");
   }
-  const guess = f0.profile === "spider-10ch" ? "These channels are a best guess for 10-channel spiders. If one does the wrong thing, tell me what it does."
+  const guess = f0.profile === "spider-10ch" ? "Checked on the rig: 2 red, 3 green, 4 blue, 5 white, 6 amber, 7 UV, 8 strobe, 9 party mode. Channels 1 and 10 are not known yet."
     : f0.profile === "gobo-spot-11ch" ? "Channels 1, 3 and 6 are checked. The others are the usual layout for these spots." : "";
   html += `<details class="sh-more"><summary>Every channel (${chans.length})</summary>${guess ? `<p class="hint">${guess}</p>` : ""}${chans.map((ch, i) => chanSlider(g, ch, i)).join("")}</details>`;
   panel.innerHTML = html;

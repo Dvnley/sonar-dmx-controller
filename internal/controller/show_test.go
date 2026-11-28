@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dvnley/sonar-dmx-controller/internal/fixture"
 )
 
 func TestDefaultRigIsDanleys(t *testing.T) {
@@ -22,9 +24,9 @@ func TestDefaultRigIsDanleys(t *testing.T) {
 	if frame[0] != 128 || frame[2] != 128 || frame[5] != 255 {
 		t.Fatalf("spot channels %v", frame[:11])
 	}
-	// spider at 34: brightness open on its ch 3
-	if frame[33+2] != 255 {
-		t.Fatalf("spider brightness %d", frame[35])
+	// spider at 34 starts white, on its ch 5 (38)
+	if frame[37] != 255 || frame[34] != 0 {
+		t.Fatalf("spider channels %v", frame[33:43])
 	}
 }
 
@@ -40,20 +42,17 @@ func TestSetupRigAndMovement(t *testing.T) {
 	if !s.Show.RigOK {
 		t.Fatal("rig not set up")
 	}
-	spot, spider := -1, -1
+	spot := -1
 	for i, f := range s.Fixtures {
-		switch f.Profile {
-		case "gobo-spot-11ch":
+		if f.Profile == "gobo-spot-11ch" {
 			spot = i
-		case "spider-10ch":
-			spider = i
 		}
 	}
 	if err := c.StartMovement(nil, MoveRun{Pattern: "sweep", Speed: 100, Size: 100}); err != nil {
 		t.Fatal(err)
 	}
-	if got := c.State().Show.Moves[0].Fixtures; len(got) != 2 || got[0] != spot || got[1] != spider {
-		t.Fatalf("movement on %v, want spot %d and spider %d", got, spot, spider)
+	if got := c.State().Show.Moves[0].Fixtures; len(got) != 1 || got[0] != spot {
+		t.Fatalf("movement on %v, want only the spot %d", got, spot)
 	}
 	// 240 BPM, 16 beats per cycle: a quarter cycle is 1 s
 	c.Frames()
@@ -61,11 +60,6 @@ func TestSetupRigAndMovement(t *testing.T) {
 	f := c.Frames()[0]
 	if f[2] < 250 || f[0] != 128 {
 		t.Fatalf("sweep should push left/right (ch 3) to the edge, not move ch 1: %v", f[:4])
-	}
-	// the spider's two bars swing against each other
-	a, b := int(f[33]), int(f[34])
-	if a+b < 250 || a+b > 258 || math.Abs(float64(a-b)) < 100 {
-		t.Fatalf("spider bars %d %d", a, b)
 	}
 
 	// changing the speed must not make the lights jump
@@ -200,7 +194,35 @@ func TestMoodKeepsMovement(t *testing.T) {
 	if err := c.PlayMood(id, 0); err != nil {
 		t.Fatal(err)
 	}
-	if mv := c.State().Show.Moves; len(mv) != 1 || mv[0].Pattern != "figure8" || len(mv[0].Fixtures) != 2 {
+	if mv := c.State().Show.Moves; len(mv) != 1 || mv[0].Pattern != "figure8" || len(mv[0].Fixtures) != 1 {
 		t.Fatalf("moves %+v", mv)
+	}
+}
+
+func TestTwoBarLightSwingsBothBars(t *testing.T) {
+	f, _ := fixture.New("Bars", "generic-rgb", "", 0, 1)
+	f.Channels = []fixture.Channel{{Name: "a", Type: fixture.Tilt}, {Name: "b", Type: fixture.Tilt}}
+	f.Values = fixture.Values{128, 128}
+	moveValues(&f, 1, 0, 100)
+	a, b := int(f.Values[0]), int(f.Values[1])
+	if a+b < 250 || a+b > 258 || math.Abs(float64(a-b)) < 100 {
+		t.Fatalf("bars %d %d", a, b)
+	}
+}
+
+func TestOldSpiderGuessMovesToCheckedMap(t *testing.T) {
+	c, _ := newTest(t)
+	old := fixture.Fixture{Name: "Spider", Profile: "spider-10ch", Mode: "10CH", Address: 34, Enabled: true, Brightness: 100,
+		Channels: []fixture.Channel{{Type: fixture.Tilt}, {Type: fixture.Tilt}, {Type: fixture.Dimmer}, {Type: fixture.Shutter},
+			{Type: fixture.Red}, {Type: fixture.Green}, {Type: fixture.Blue}, {Type: fixture.White}, {Type: fixture.Speed}, {Type: fixture.Auto}},
+		Values: fixture.Values{128, 128, 255, 0, 0, 0, 255, 0, 0, 0}}
+	c.cfg.Fixtures = []fixture.Fixture{old}
+	c.normalize()
+	f := c.cfg.Fixtures[0]
+	if f.Channels[1].Type != fixture.Red || f.Channels[6].Type != fixture.UV || f.Values[3] != 255 {
+		t.Fatalf("not moved: %+v %v", f.Channels, f.Values)
+	}
+	if fr := c.Frames()[0]; fr[36] != 255 || fr[39] != 0 {
+		t.Fatalf("blue should be on 37: %v", fr[33:43])
 	}
 }

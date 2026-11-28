@@ -161,6 +161,12 @@ func (c *Controller) normalize() {
 			f.Remap(p.Modes[0].Channels)
 			f.Mode = p.Modes[0].Name
 		}
+		// The spider's first channel map was a guess (bars on 1-2, RGBW on
+		// 5-8); the rig check found the colors on 2-7.
+		if f.Profile == "spider-10ch" && len(f.Channels) == 10 && f.Channels[0].Type == fixture.Tilt {
+			p, _ := fixture.FindProfile(f.Profile)
+			f.Remap(p.Modes[0].Channels)
+		}
 		f.Normalize()
 	}
 }

@@ -85,10 +85,12 @@ usual layout for these spots):
 
 Configs saved with the first 11CH guess are moved to this layout on launch.
 
-Spider channels, **a guess** for the common 8-eye RGBW spider in 10CH mode:
+Spider channels, 10CH (checked on the rig, except 1 and 10):
 
-1 Left bar tilt · 2 Right bar tilt · 3 Brightness · 4 Strobe · 5 Red ·
-6 Green · 7 Blue · 8 White · 9 Move speed · 10 Auto/sound
+1 not known · 2 Red · 3 Green · 4 Blue · 5 White · 6 Amber · 7 UV ·
+8 Strobe · 9 Party mode · 10 not known
+
+Configs saved with the first spider guess are moved to this layout on launch.
 
 If a light does the wrong thing, check it in **Channel sweep** and fix its
 channel map in the Patch tab or make a preset in **Fixture presets**. The old
