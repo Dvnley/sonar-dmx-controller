@@ -257,6 +257,57 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 		result(w, c, err)
 	})
+	mux.HandleFunc("POST /api/hit", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On       bool            `json:"on"`
+			Color    string          `json:"color"`
+			Fixtures json.RawMessage `json:"fixtures"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.SetHit(body.On, body.Color, targets)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/show/aim", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			X        float64         `json:"x"`
+			Y        float64         `json:"y"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.SetAim(targets, body.X, body.Y)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/aim/save", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name   string `json:"name"`
+			Remove bool   `json:"remove"`
+		}
+		if decode(w, r, &body) {
+			result(w, c, c.SaveAim(body.Name, body.Remove))
+		}
+	})
+	mux.HandleFunc("POST /api/undo", func(w http.ResponseWriter, r *http.Request) {
+		result(w, c, c.Undo())
+	})
+	mux.HandleFunc("POST /api/check", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Stop bool `json:"stop"`
+		}
+		if decode(w, r, &body) {
+			c.StartCheck(body.Stop)
+			result(w, c, nil)
+		}
+	})
 	mux.HandleFunc("POST /api/auto", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			On          *bool `json:"on"`

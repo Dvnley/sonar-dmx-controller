@@ -109,7 +109,55 @@ $("#sh-music").onchange = () => {
   api("/api/show/speed", runOpts());
 };
 $("#sh-tap").onpointerdown = e => { e.preventDefault(); fetch("/api/beat", { method: "POST", body: '{"source":"tap"}' }); };
-$("#sh-strobe").onclick = () => api("/api/strobe", { hz: state.perform.strobe_hz ? 0 : 8 });
+let strobeHz = loadPref("strobehz", 8);
+$("#sh-strobe").onclick = () => api("/api/strobe", { hz: state.perform.strobe_hz ? 0 : strobeHz });
+$$("#sh-strobespeed button").forEach(b => b.onclick = () => {
+  strobeHz = +b.dataset.hz; savePref("strobehz", strobeHz); paintSegs();
+  if (state.perform.strobe_hz) api("/api/strobe", { hz: strobeHz });
+});
+let lookFade = loadPref("lookfade", 1.5);
+$$("#sh-fade button").forEach(b => b.onclick = () => { lookFade = +b.dataset.fade; savePref("lookfade", lookFade); paintSegs(); });
+function paintSegs() {
+  $$("#sh-strobespeed button").forEach(b => b.classList.toggle("on", +b.dataset.hz === strobeHz));
+  $$("#sh-fade button").forEach(b => b.classList.toggle("on", +b.dataset.fade === lookFade));
+}
+paintSegs();
+
+// hold a color button: every light goes that color until you let go
+$$("[data-hit]").forEach(b => {
+  let held = false;
+  const down = e => { e.preventDefault(); if (held) return; held = true; b.classList.add("on"); api("/api/hit", { on: true, color: b.dataset.hit }); };
+  const up = () => { if (!held) return; held = false; b.classList.remove("on"); api("/api/hit", { on: false, color: b.dataset.hit }); };
+  b.onpointerdown = e => { b.setPointerCapture(e.pointerId); down(e); };
+  b.onpointerup = b.onpointercancel = b.onlostpointercapture = up;
+  b.oncontextmenu = e => e.preventDefault();
+  window.addEventListener("blur", up);
+});
+
+$("#sh-undo").onclick = () => api("/api/undo", {});
+function saveNowForm() {
+  const w = $("#sh-savewrap");
+  w.innerHTML = `<input id="sh-savename" placeholder="Name this look" maxlength="40"><button id="sh-saveok" class="primary">Save</button><button id="sh-savecancel">Cancel</button>`;
+  const inp = $("#sh-savename");
+  inp.focus();
+  const done = () => { w.innerHTML = `<button id="sh-savenow" class="sh-small">+ Save what's on</button>`; $("#sh-savenow").onclick = saveNowForm; };
+  const save = async () => { const name = inp.value.trim(); if (!name) { inp.focus(); return; } await api("/api/mood/save", { name }); done(); };
+  $("#sh-saveok").onclick = save;
+  $("#sh-savecancel").onclick = done;
+  inp.onkeydown = e => { if (e.key === "Enter") save(); if (e.key === "Escape") done(); };
+}
+$("#sh-savenow").onclick = saveNowForm;
+
+$("#sh-checkbtn").onclick = () => api("/api/check", {});
+function renderCheck() {
+  const ck = state.tools && state.tools.check, el = $("#sh-check");
+  el.classList.toggle("hidden", !(ck && ck.running));
+  $("#sh-checkbtn").classList.toggle("on", !!(ck && ck.running));
+  if (!ck || !ck.running) return;
+  const what = { red: "red", green: "green", blue: "blue", white: "white", center: "pointing at the middle", left: "pointing left", right: "pointing right", up: "tilting one way", down: "tilting the other way" }[ck.doing] || ck.doing;
+  const txt = `<div><b>Checking your lights</b> · ${esc(ck.light)} should be <b>${esc(what)}</b> now. Everything else is off. <small>(${ck.step} of ${ck.steps})</small></div><button id="sh-checkstop">Stop</button>`;
+  if (el.dataset.t !== txt) { el.dataset.t = txt; el.innerHTML = txt; $("#sh-checkstop").onclick = () => api("/api/check", { stop: true }); }
+}
 $("#sh-stopall").onclick = async () => {
   await api("/api/program/stop", { fixtures: "all" });
   await api("/api/movement/stop", { fixtures: "all" });
@@ -342,10 +390,13 @@ function renderAuto() {
 
 // ---------- quick looks, tips and keys ----------
 let qlooksSig = "";
+let looksOpen = loadPref("looksopen", false);
+const HIT_KEYS = { w: "white", r: "red", u: "blue" };
 function renderQuickLooks() {
   const el = $("#sh-qlooks");
   const playing = state.schedule.playing_id, auto = !!(state.auto && state.auto.on);
-  const sig = JSON.stringify([state.moods.map(m => [m.id, m.name, m.colors]), playing, auto]);
+  const limit = window.innerWidth < 760 ? 6 : 12;
+  const sig = JSON.stringify([state.moods.map(m => [m.id, m.name, m.colors]), playing, auto, looksOpen, limit]);
   if (sig === qlooksSig) return;
   qlooksSig = sig;
   if (!state.moods.length) {
@@ -357,15 +408,21 @@ function renderQuickLooks() {
     const c = (cs && cs.length ? cs : ["#333"]).slice(0, 5).map(esc);
     return c.length === 1 ? c[0] : `linear-gradient(90deg, ${c.join(", ")})`;
   };
-  el.innerHTML = state.moods.map((m, i) => `
+  const shown = looksOpen ? state.moods : state.moods.slice(0, limit);
+  el.innerHTML = shown.map((m, i) => `
     <button class="sh-qlook${m.id === playing && !auto ? " on" : ""}" data-qlook="${esc(m.id)}">
       <i class="sh-qbar" style="background:${grad(m.colors)}"></i>
       <span>${esc(m.name)}</span>${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}
-    </button>`).join("") + `<button class="sh-qlook sh-qmore" id="sh-morelooks" title="Adds any ready-made looks you don't have yet"><span>+ New looks</span></button>`;
-  $("#sh-morelooks").onclick = () => api("/api/mood/starters", {});
+    </button>`).join("") +
+    (state.moods.length > limit ? `<button class="sh-qlook sh-qmore" id="sh-alllooks"><span>${looksOpen ? "Fewer looks" : `All ${state.moods.length} looks`}</span></button>` : "") +
+    (looksOpen || state.moods.length <= limit ? `<button class="sh-qlook sh-qmore" id="sh-morelooks" title="Adds any ready-made looks you don't have yet"><span>+ New looks</span></button>` : "");
+  const all = $("#sh-alllooks");
+  if (all) all.onclick = () => { looksOpen = !looksOpen; savePref("looksopen", looksOpen); renderQuickLooks(); };
+  const more = $("#sh-morelooks");
+  if (more) more.onclick = () => api("/api/mood/starters", {});
   $$("[data-qlook]", el).forEach(b => b.onclick = () => playLook(b.dataset.qlook));
 }
-function playLook(id) { api("/api/mood/play", { id, fade: 1.5 }); }
+function playLook(id) { api("/api/mood/play", { id, fade: lookFade }); }
 
 if (!loadPref("tipsdone", false)) $("#sh-tips").classList.remove("hidden");
 $("#sh-tipsok").onclick = () => { savePref("tipsdone", true); $("#sh-tips").classList.add("hidden"); };
@@ -377,6 +434,8 @@ document.addEventListener("keydown", e => {
   if (k === "a") { if (!e.repeat) $("#sh-autobtn").click(); }
   else if (k === "b") { if (!e.repeat) $("#sh-blackout").click(); }
   else if (k === "s") { if (!e.repeat) $("#sh-strobe").click(); }
+  else if (k === "z") { if (!e.repeat) $("#sh-undo").click(); }
+  else if (HIT_KEYS[k]) { if (!e.repeat) api("/api/hit", { on: true, color: HIT_KEYS[k] }); }
   else if (k === "f") { if (!e.repeat) { $("#sh-flash").classList.add("on"); api("/api/flash", { on: true }); } }
   else if (/^[1-9]$/.test(k)) { if (state && state.moods[+k - 1]) playLook(state.moods[+k - 1].id); }
   else return;
@@ -384,6 +443,7 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("keyup", e => {
   if (tab === "show" && e.key.toLowerCase() === "f") { $("#sh-flash").classList.remove("on"); api("/api/flash", { on: false }); }
+  if (tab === "show" && HIT_KEYS[e.key.toLowerCase()]) api("/api/hit", { on: false });
 });
 
 // ---------- render ----------
@@ -405,6 +465,11 @@ function renderShow() {
   // things that change often are updated in place
   renderAuto();
   renderQuickLooks();
+  renderCheck();
+  const t = state.tools || {};
+  const ub = $("#sh-undo");
+  ub.disabled = !t.can_undo;
+  ub.title = t.can_undo ? `Go back to ${t.undo_name || "what was on before"}` : "Nothing to go back to yet";
   const m = $("#sh-master");
   if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master + "%"; }
   if (Date.now() - speedTouched > 3000) {
@@ -425,7 +490,7 @@ function renderShow() {
   if (!["all", "schedule", "phone"].includes(shSel) && !groups.some(g => g.key === shSel)) shSel = "all";
   const sig = JSON.stringify([groups.map(g => [g.key, g.name, g.on, g.list.map(f => [f.brightness, f.values, f.enabled])]),
     p.runs.map(r => [r.program, r.fixtures, r.variation]), sh.moves.map(r => [r.pattern, r.fixtures, r.size]),
-    sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length,
+    sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length, (state.tools || {}).aim_points,
     shSel === "schedule" ? [state.schedule, state.moods.map(m => [m.id, m.name, m.colors]), lookDelArmed, schedDay, schedSel, tlDraft] : 0,
     shSel === "phone" ? phoneInfo : 0]);
   // don't rebuild the schedule while a time or look is being picked
@@ -585,9 +650,20 @@ function renderLight(panel, g) {
   if (g.moving) {
     html += section("Movement", choices("mv", [["None", ""], ...sh.movements.map(x => [x.name, x.id])], move ? move.pattern : ""));
     if (move) html += section("How far it moves", choices("size", SHOW_SIZES, showSize));
-    let aim = "";
-    chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") aim += chanSlider(g, ch, i); });
-    html += section("Where it points", aim + `<button class="sh-link" data-center>Point at the middle</button>`, move ? "it moves around this spot" : "");
+    const pi = chans.findIndex(c => c.type === "pan"), ti = chans.findIndex(c => c.type === "tilt");
+    const ax = pi >= 0 ? f0.values[pi] / 255 : 0.5, ay = ti >= 0 ? f0.values[ti] / 255 : 0.5;
+    const pts = (state.tools && state.tools.aim_points) || [];
+    html += section("Where it points", `<div class="aim">
+        <div class="aim-pad xy" data-aimpad><i class="aim-cross"></i><b class="aim-dot" style="left:${ax * 100}%;top:${ay * 100}%"></b></div>
+        <div class="aim-side">
+          <p class="hint">Drag on the square to point the spots. Left and right across, the up/down channel down the square.</p>
+          <div class="aim-pts">
+            <button data-aimgo="0.5,0.5">Middle</button>
+            ${pts.map(p => `<span class="aim-pt"><button data-aimgo="${p.x},${p.y}">${esc(p.name)}</button><button class="aim-x" data-aimdel="${esc(p.name)}" title="Forget">×</button></span>`).join("")}
+          </div>
+          <div class="aim-save"><input data-aimname placeholder="Name this spot, e.g. Dance floor" maxlength="30"><button data-aimsave>Save spot</button></div>
+        </div>
+      </div>`, move ? "it moves around this spot" : "");
   }
   const guess = f0.profile === "spider-10ch" ? "Checked on the rig: 2 red, 3 green, 4 blue, 5 white, 6 amber, 7 UV, 8 strobe, 9 party mode. Channels 1 and 10 are not known yet."
     : f0.profile === "gobo-spot-11ch" ? "Channels 1, 3 and 6 are checked. The others are the usual layout for these spots." : "";
@@ -606,12 +682,24 @@ function renderLight(panel, g) {
     $$(`input[data-ch="${inp.dataset.ch}"]`, panel).forEach(o => { o.value = inp.value; o.nextElementSibling.textContent = inp.value; });
     throttled(`ch${g.key}:${inp.dataset.ch}`, () => setCh(+inp.dataset.ch, +inp.value));
   });
-  const c = $("[data-center]", panel);
-  if (c) c.onclick = () => {
-    const vals = {};
-    chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") vals[i + 1] = 128; });
-    Promise.all(g.idx.map(fi => api("/api/fixture", { index: fi, values: vals })));
-  };
+  const pad = $("[data-aimpad]", panel);
+  if (pad) {
+    const dot = $(".aim-dot", pad);
+    const aimAt = e => {
+      const r = pad.getBoundingClientRect();
+      const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      dot.style.left = x * 100 + "%"; dot.style.top = y * 100 + "%";
+      throttled("aim" + g.key, () => api("/api/show/aim", { fixtures: g.idx, x, y }));
+    };
+    pad.onpointerdown = e => { e.preventDefault(); pad.setPointerCapture(e.pointerId); dragging++; aimAt(e); pad.onpointermove = aimAt; };
+    pad.onpointerup = pad.onpointercancel = () => { pad.onpointermove = null; dragging = 0; };
+    $$("[data-aimgo]", panel).forEach(b => b.onclick = () => { const [x, y] = b.dataset.aimgo.split(",").map(Number); api("/api/show/aim", { fixtures: g.idx, x, y }); });
+    $$("[data-aimdel]", panel).forEach(b => b.onclick = () => api("/api/aim/save", { name: b.dataset.aimdel, remove: true }));
+    const nm = $("[data-aimname]", panel);
+    const saveAim = () => { if (nm.value.trim()) api("/api/aim/save", { name: nm.value.trim() }); };
+    $("[data-aimsave]", panel).onclick = saveAim;
+    nm.onkeydown = e => { if (e.key === "Enter") saveAim(); };
+  }
 }
 
 // ---------- schedule: a timeline of the night ----------
@@ -647,11 +735,12 @@ function onNight(e, d) {
 }
 function moodColor2(id) {
   if (id === "off") return "#000";
+  if (id === "auto") return "linear-gradient(90deg,#7b2ff7,#f107a3)";
   const m = (state.moods || []).find(x => x.id === id);
   const cs = (m && m.colors && m.colors.length ? m.colors : ["#555"]).slice(0, 4);
   return cs.length > 1 ? `linear-gradient(90deg, ${cs.join(",")})` : cs[0];
 }
-function moodLabel(id) { return id === "off" ? "Lights off" : ((state.moods || []).find(x => x.id === id) || { name: "?" }).name; }
+function moodLabel(id) { return id === "off" ? "Lights off" : id === "auto" ? "Auto" : ((state.moods || []).find(x => x.id === id) || { name: "?" }).name; }
 
 function scheduleDraft() {
   if (!tlDraft) tlDraft = state.schedule.entries.map(e => ({ time: e.time, mood: e.mood, days: e.days ? [...e.days] : [], fade: e.fade }));
@@ -698,6 +787,7 @@ function renderSchedule(panel) {
   const isTonight = schedDay === (nowD.getHours() * 60 + nowD.getMinutes() < NIGHT_START ? (nowD.getDay() + 6) % 7 : nowD.getDay());
 
   const lookOpts = id => `<option value="off" ${id === "off" ? "selected" : ""}>Lights off</option>` +
+    `<option value="auto" ${id === "auto" ? "selected" : ""}>Auto (follows the music)</option>` +
     moods.map(m => `<option value="${esc(m.id)}" ${m.id === id ? "selected" : ""}>${esc(m.name)}</option>`).join("");
   const rows = tonight.map(({ e, i }) => `<div class="sh-srow ${i === schedSel ? "sel" : ""}" data-i="${i}">
       <div class="tl-time"><button data-step="-15" title="15 minutes earlier">−</button>

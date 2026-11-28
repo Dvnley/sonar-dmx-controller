@@ -121,6 +121,14 @@ On the Show tab the **Looks** row plays any saved look with one tap
 water*). Keys on the Mac: **A** Auto, **B** Blackout, **F** Flash (hold),
 **S** Strobe, **1-9** the first nine looks.
 
+**More tools on the Show tab:**
+- **Hold for color**: hold White, Red, Blue, Green, UV or Amber and every light goes that color until you let go (keys: hold W, R, U).
+- **Strobe speed**: Slow, Medium or Fast for the Strobe button.
+- **Looks bar**: pick how looks come in (Snap, Fade, Slow fade), **Back** returns to what was on before the last look (key Z, press again to go forward), and **+ Save what's on** saves the current lights as a look.
+- **Aim the spots**: in the Spots panel, drag on the square to point them, tap Middle, or save places like "Dance floor" and tap them later. Movements keep running around the aim.
+- **Check my lights**: walks each light through red, green, blue and white, and the spots through middle, left, right and both tilts, one light at a time, so you can see before a gig that everything answers.
+- **Auto in the schedule**: a schedule line can be "Auto (follows the music)", and Auto stays on after the app restarts until you turn it off.
+
 The **Water** effect ripples blue and white through the lights, with the
 white crests on the spider's own white channel.
 
@@ -197,6 +205,8 @@ white crests on the spider's own white channel.
   ArtPoll.
 
 ## API
+
+Tools: `POST /api/hit {on, color}`, `/api/show/aim {fixtures, x, y}`, `/api/aim/save {name, remove}`, `/api/undo`, `/api/check {stop}`.
 
 Auto: `POST /api/auto {on, sensitivity}`, `POST /api/auto/level {level}` (mic RMS 0-1, a few times a second).
 

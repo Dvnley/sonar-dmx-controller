@@ -73,15 +73,27 @@ func (c *Controller) SetAuto(on *bool, sensitivity *int) {
 	a := &c.auto
 	if sensitivity != nil {
 		a.sensitivity = clamp(*sensitivity, 0, 100)
+		s := a.sensitivity
+		c.cfg.AutoSensitivity = &s
+		c.changed()
 	}
 	if on == nil || *on == a.on {
 		return
 	}
-	a.on = *on
-	if !a.on {
+	if !*on {
+		a.on, c.cfg.AutoOn = false, false
+		c.changed()
 		return
 	}
-	now := c.now()
+	c.rememberForUndo()
+	c.autoStart(c.now())
+}
+
+// autoStart must be called with mu held. It turns Auto on.
+func (c *Controller) autoStart(now time.Time) {
+	a := &c.auto
+	a.on, c.cfg.AutoOn = true, true
+	c.changed()
 	if a.rng == nil {
 		a.rng = rand.New(rand.NewSource(now.UnixNano()))
 	}

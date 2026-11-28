@@ -232,6 +232,7 @@ func (c *Controller) PlayMood(id string, fadeSec float64) error {
 	if id != MoodOff && c.findMood(id) < 0 {
 		return fmt.Errorf("no mood %q", id)
 	}
+	c.rememberForUndo()
 	c.applyMood(id, fadeSec)
 	c.moodByHand = true
 	return nil
@@ -239,7 +240,7 @@ func (c *Controller) PlayMood(id string, fadeSec float64) error {
 
 // applyMood must be called with mu held.
 func (c *Controller) applyMood(id string, fadeSec float64) {
-	c.auto.on = false // a mood picked by hand or by the schedule ends Auto
+	c.auto.on, c.cfg.AutoOn = false, false // a mood picked by hand or by the schedule ends Auto
 	var m *Mood
 	if id != MoodOff {
 		m = &c.cfg.Moods[c.findMood(id)]
@@ -477,7 +478,7 @@ func (c *Controller) SetSchedule(s Schedule) error {
 			return fmt.Errorf("line %d: %q is not a time like 21:30", i+1, e.Time)
 		}
 		e.Time = fmt.Sprintf("%02d:%02d", hh, mm)
-		if e.Mood != MoodOff && c.findMood(e.Mood) < 0 {
+		if e.Mood != MoodOff && e.Mood != MoodAuto && c.findMood(e.Mood) < 0 {
 			return fmt.Errorf("line %d: pick a mood", i+1)
 		}
 		days := map[int]bool{}
@@ -538,7 +539,7 @@ func (c *Controller) occurrence(now time.Time, forward bool) *Occurrence {
 		day := time.Date(local.Year(), local.Month(), local.Day()+d, 12, 0, 0, 0, loc)
 		for i, e := range c.cfg.Schedule.Entries {
 			hh, mm, ok := parseClock(e.Time)
-			if !ok || !e.onDay(day.Weekday()) || (e.Mood != MoodOff && c.findMood(e.Mood) < 0) {
+			if !ok || !e.onDay(day.Weekday()) || (e.Mood != MoodOff && e.Mood != MoodAuto && c.findMood(e.Mood) < 0) {
 				continue
 			}
 			at := time.Date(day.Year(), day.Month(), day.Day(), hh, mm, 0, 0, loc)
@@ -588,6 +589,11 @@ func (c *Controller) CheckSchedule() {
 		fadeSec = 0 // just launched: go straight to it
 	}
 	c.schedKey, c.started = key, true
+	if e.Mood == MoodAuto {
+		c.autoStart(c.now())
+		c.moodByHand = false
+		return
+	}
 	c.applyMood(e.Mood, fadeSec)
 	c.moodByHand = false
 }

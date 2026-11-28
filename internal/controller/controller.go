@@ -36,6 +36,11 @@ type Config struct {
 	// Moods are whole looks the schedule plays at set times.
 	Moods    []Mood   `json:"moods,omitempty"`
 	Schedule Schedule `json:"schedule"`
+	// AimPoints are saved places for the spots to point at.
+	AimPoints []AimPoint `json:"aim_points,omitempty"`
+	// AutoOn keeps Auto running after a restart.
+	AutoOn          bool `json:"auto_on,omitempty"`
+	AutoSensitivity *int `json:"auto_sensitivity,omitempty"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
@@ -81,8 +86,12 @@ type Controller struct {
 	sweep    *Sweep
 	manual   map[int]map[int]uint8 // hand faders: universe -> channel -> value
 	auto     autoState
-	sendErr  string
-	saveT    *time.Timer
+	// tools
+	flashColor string
+	undo       *Mood
+	checkFrom  time.Time
+	sendErr    string
+	saveT      *time.Timer
 
 	fades        map[int]*fade
 	flashUntil   time.Time
@@ -135,6 +144,9 @@ func New(path string, sender Sender) (*Controller, error) {
 		}
 	}
 	c.normalize()
+	if s := c.cfg.AutoSensitivity; s != nil {
+		c.auto.sensitivity = clamp(*s, 0, 100)
+	}
 	return c, nil
 }
 
@@ -298,6 +310,11 @@ func (c *Controller) Run(ctx context.Context) {
 	defer poll.Stop()
 	defer sched.Stop()
 	c.CheckSchedule()
+	c.mu.Lock()
+	if c.cfg.AutoOn && !c.auto.on {
+		c.autoStart(c.now()) // it was on when the app stopped
+	}
+	c.mu.Unlock()
 	c.Poll()
 	for {
 		select {
@@ -366,6 +383,9 @@ func (c *Controller) frames() map[int][]byte {
 	}
 	fixtures, out := c.performLook(now)
 	c.live = fixtures
+	if st, _, _ := c.checkNow(now); st != nil {
+		fixtures, out = checkLook(fixtures, st), fixture.Output{Master: 100}
+	}
 	if phase := c.testPhase(now); phase >= 0 {
 		fixtures = testLook(fixtures, testColors[phase])
 		out = fixture.Output{Master: 100}
@@ -406,6 +426,16 @@ func testLook(src []fixture.Fixture, color string) []fixture.Fixture {
 				f.Set(fixture.Green, 255)
 			case "blue":
 				f.Set(fixture.Blue, 255)
+			case "uv":
+				if !f.Set(fixture.UV, 255) {
+					f.Set(fixture.Red, 120)
+					f.Set(fixture.Blue, 255)
+				}
+			case "amber":
+				if !f.Set(fixture.Amber, 255) {
+					f.Set(fixture.Red, 255)
+					f.Set(fixture.Green, 110)
+				}
 			case "white":
 				if !f.Set(fixture.White, 255) {
 					f.Set(fixture.Red, 255)
@@ -453,6 +483,7 @@ type State struct {
 	Show        ShowState             `json:"show"`
 	Faders      FaderState            `json:"faders"`
 	Auto        AutoState             `json:"auto"`
+	Tools       ToolsState            `json:"tools"`
 }
 
 // State snapshots everything the UI needs.
@@ -465,7 +496,7 @@ func (c *Controller) State() State {
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
 		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
-		Show: c.showState(), Faders: c.faderState(), Auto: c.autoInfo(),
+		Show: c.showState(), Faders: c.faderState(), Auto: c.autoInfo(), Tools: c.toolsState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}
