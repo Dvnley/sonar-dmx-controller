@@ -1,20 +1,21 @@
 "use strict";
 
-// Show tab: one screen for running the night. Each light type gets its own
-// box, so it is always clear which light a control changes.
+// Show tab: one calm screen for running the night. Pick a light at the top
+// (or Everything), and the panel below only shows what that light can do, so
+// it is always clear which light a control changes.
 
 const SHOW_COLORS = [
-  ["Red", "#ff2a2a", [255, 0, 0]], ["Orange", "#ff7a1a", [255, 80, 0]], ["Yellow", "#ffe03a", [255, 180, 0]],
-  ["Green", "#2bd94a", [0, 255, 0]], ["Cyan", "#2be0ff", [0, 255, 255]], ["Blue", "#2f5bff", [0, 0, 255]],
-  ["Purple", "#8a2bff", [120, 0, 255]], ["Pink", "#ff4fc0", [255, 0, 160]], ["White", "#ffffff", [255, 255, 255]],
+  ["Red", "#ff3b3b", [255, 0, 0]], ["Orange", "#ff8a2a", [255, 80, 0]], ["Yellow", "#ffd93a", [255, 180, 0]],
+  ["Green", "#36d65a", [0, 255, 0]], ["Cyan", "#36d9f5", [0, 255, 255]], ["Blue", "#3f63ff", [0, 0, 255]],
+  ["Purple", "#9147ff", [120, 0, 255]], ["Pink", "#ff5cc6", [255, 0, 160]], ["White", "#ffffff", [255, 255, 255]],
 ];
-const SHOW_STROBES = [["Off", 0], ["Slow", 3], ["Fast", 10]];
-const SHOW_SIZES = [["A little", 30], ["Medium", 60], ["A lot", 100]];
+const SHOW_SIZES = [["Small", 30], ["Medium", 60], ["Big", 100]];
 const COLOR_TYPES = ["red", "green", "blue", "amber", "white", "uv"];
 
 let showPrograms = [], showPalettes = [];
 let showVar = loadPref("showvar", 0);
 let showSize = loadPref("showsize", 60);
+let shSel = loadPref("showsel", "all");
 let showSig = "";
 let rigArmed = false;
 let speedTouched = 0;
@@ -33,35 +34,46 @@ function showGroups() {
   const out = [];
   for (const [profile, list] of byProfile) {
     const f0 = list[0];
-    const name = list.length > 1 ? `${f0.name.replace(/\s*\d+$/, "")}s ×${list.length}` : f0.name;
+    const name = list.length > 1 ? `${f0.name.replace(/\s*\d+$/, "")}s` : f0.name;
     const lo = Math.min(...list.map(f => f.address)), hi = Math.max(...list.map(f => f.end));
     out.push({
-      key: profile, name, list, idx: list.map(f => f.index), profileName: f0.profile_name,
+      key: profile, name, list, idx: list.map(f => f.index),
       color: list.some(f => f.channels.some(c => COLOR_TYPES.includes(c.type))),
       moving: list.some(f => f.channels.some(c => c.type === "pan" || c.type === "tilt")),
       on: list.some(f => f.enabled),
-      where: list.length > 1 ? `DMX ${lo}–${hi}` : `DMX ${lo}`, chans: f0.channels.length,
+      where: list.length > 1 ? `DMX ${lo}–${hi}` : `DMX ${lo}`,
     });
   }
-  // lights that are switched on come first
   return out.sort((a, b) => (b.on - a.on) || (a.list[0].address - b.list[0].address));
 }
 
 function showRunFor(g, list) { return list.find(r => r.fixtures.some(i => g.idx.includes(i))); }
+function progName(id) { return (showPrograms.find(p => p.id === id) || { name: id }).name; }
+function moveName(id) { return (state.show.movements.find(m => m.id === id) || { name: id }).name; }
 
 // glow is the light's color right now; lights with no color mixing glow white
 // as bright as they are.
 function glow(i) {
   const f = state.fixtures[i];
-  if (!f || !f.enabled || state.blackout) return "#111";
-  if (f.channels.some(c => COLOR_TYPES.includes(c.type))) return (state.perform.live || [])[i] || "#111";
+  if (!f || !f.enabled || state.blackout) return "#1a1d24";
+  if (f.channels.some(c => COLOR_TYPES.includes(c.type))) return (state.perform.live || [])[i] || "#1a1d24";
   const d = f.channels.findIndex(c => c.type === "dimmer");
   const lvl = (d >= 0 ? f.values[d] / 255 : 1) * f.brightness / 100 * state.master / 100;
-  return `rgba(255,255,255,${Math.max(0.08, lvl).toFixed(2)})`;
+  return `rgba(255,255,255,${Math.max(0.1, lvl).toFixed(2)})`;
 }
 
 function speedWord(s) {
   return s < 15 ? "Very slow" : s < 40 ? "Slow" : s < 62 ? "Medium" : s < 85 ? "Fast" : "Very fast";
+}
+
+// what a light is doing, in a few words
+function doing(g) {
+  if (!g.on) return "Off";
+  const run = showRunFor(g, state.perform.runs), mv = showRunFor(g, state.show.moves);
+  const parts = [];
+  if (run) parts.push(progName(run.program));
+  if (mv) parts.push(moveName(mv.pattern));
+  return parts.join(" · ") || "Still";
 }
 
 // ---------- actions ----------
@@ -74,10 +86,15 @@ function startProgram(fixtures, program) {
 function startMove(fixtures, pattern) {
   return api("/api/movement", { fixtures, pattern, size: showSize, ...runOpts() });
 }
+function sendShowColor(fixtures, name) {
+  const [, , [r, g, b]] = SHOW_COLORS.find(c => c[0] === name);
+  const white = name === "White";
+  return api("/api/color", { fixtures, r: white ? 0 : r, g: white ? 0 : g, b: white ? 0 : b, w: white ? 255 : 0, a: 0, uv: 0, fade: 0.3 });
+}
 
 $("#sh-blackout").onclick = () => api("/api/blackout", { on: !state.blackout });
 $("#sh-master").oninput = e => {
-  $("#sh-masterv").textContent = e.target.value;
+  $("#sh-masterv").textContent = e.target.value + "%";
   throttled("master", () => api("/api/master", { value: +e.target.value }));
 };
 $("#sh-speed").oninput = e => {
@@ -85,8 +102,13 @@ $("#sh-speed").oninput = e => {
   $("#sh-speedword").textContent = speedWord(+e.target.value);
   throttled("showspeed", () => api("/api/show/speed", runOpts()));
 };
-$("#sh-music").onchange = () => { speedTouched = Date.now(); api("/api/show/speed", runOpts()); };
+$("#sh-music").onchange = () => {
+  speedTouched = Date.now();
+  $("#sh-tap").classList.toggle("hidden", !$("#sh-music").checked);
+  api("/api/show/speed", runOpts());
+};
 $("#sh-tap").onpointerdown = e => { e.preventDefault(); fetch("/api/beat", { method: "POST", body: '{"source":"tap"}' }); };
+$("#sh-strobe").onclick = () => api("/api/strobe", { hz: state.perform.strobe_hz ? 0 : 8 });
 $("#sh-stopall").onclick = async () => {
   await api("/api/program/stop", { fixtures: "all" });
   await api("/api/movement/stop", { fixtures: "all" });
@@ -111,64 +133,43 @@ function renderShow() {
 
   // things that change often are updated in place
   const m = $("#sh-master");
-  if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master; }
-  const sp = $("#sh-speed");
+  if (!dragging || document.activeElement !== m) { m.value = state.master; $("#sh-masterv").textContent = state.master + "%"; }
   if (Date.now() - speedTouched > 3000) {
-    sp.value = sh.speed;
+    $("#sh-speed").value = sh.speed;
     $("#sh-music").checked = sh.music;
     $("#sh-speedword").textContent = speedWord(sh.speed);
+    $("#sh-tap").classList.toggle("hidden", !sh.music);
   }
-  const bpmEl = $("#sh-bpm");
-  bpmEl.textContent = p.beat.live ? `${Math.round(p.beat.bpm)} BPM from ${p.beat.source}` : (sh.music ? "no beat yet: tap TAP to the music" : "");
-  bpmEl.classList.toggle("hidden", !bpmEl.textContent);
+  const bpm = $("#sh-bpm");
+  bpm.textContent = sh.music ? (p.beat.live ? `${Math.round(p.beat.bpm)} BPM` : "waiting for a beat") : "";
   const bo = $("#sh-blackout");
   bo.classList.toggle("on", state.blackout);
-  bo.textContent = state.blackout ? "BLACKOUT ON (tap to bring lights back)" : "BLACKOUT";
-  $$("#sh-groups .shglow").forEach(el => el.style.setProperty("--lc", glow(+el.dataset.i)));
+  bo.textContent = state.blackout ? "Lights are off · tap to bring back" : "Blackout";
+  $("#sh-strobe").classList.toggle("on", !!p.strobe_hz);
+  $$("#tab-show .sh-glow").forEach(el => el.style.setProperty("--lc", glow(+el.dataset.i)));
 
   const groups = showGroups();
+  if (shSel !== "all" && !groups.some(g => g.key === shSel)) shSel = "all";
   const sig = JSON.stringify([groups.map(g => [g.key, g.name, g.on, g.list.map(f => [f.brightness, f.values, f.enabled])]),
     p.runs.map(r => [r.program, r.fixtures, r.variation]), sh.moves.map(r => [r.pattern, r.fixtures, r.size]),
-    p.strobe_hz, sh.rig_ok, rigArmed, showVar, showSize, showPrograms.length, state.conflicts.length]);
+    sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length]);
   if (sig === showSig || dragging) return;
   showSig = sig;
 
   renderRig(sh);
-  chips($("#sh-strobe"), SHOW_STROBES, p.strobe_hz, v => api("/api/strobe", { hz: +v }));
-
-  // whole-rig program and movement: lit when every group of that kind runs it
-  const colorGroups = groups.filter(g => g.color && g.on), moveGroups = groups.filter(g => g.moving && g.on);
-  const allRun = id => colorGroups.length && colorGroups.every(g => (showRunFor(g, p.runs) || {}).program === id);
-  const allMove = id => moveGroups.length && moveGroups.every(g => (showRunFor(g, sh.moves) || {}).pattern === id);
-  const on = (list, idx) => list.filter(g => g.on).flatMap(g => g.idx);
-  $("#sh-progs").innerHTML = showPrograms.map(pr => `<button class="shprog ${allRun(pr.id) ? "on" : ""}" data-p="${pr.id}">${esc(pr.name)}</button>`).join("");
-  $$("#sh-progs .shprog").forEach(b => b.onclick = () => startProgram(on(colorGroups), b.dataset.p));
-  $("#sh-moves").innerHTML = `<button class="shprog ${moveGroups.length && !moveGroups.some(g => showRunFor(g, sh.moves)) ? "on" : ""}" data-m="">Still</button>` +
-    sh.movements.map(mv => `<button class="shprog ${allMove(mv.id) ? "on" : ""}" data-m="${mv.id}">${esc(mv.name)}</button>`).join("");
-  $$("#sh-moves .shprog").forEach(b => b.onclick = () => b.dataset.m ? startMove(on(moveGroups), b.dataset.m) : api("/api/movement/stop", { fixtures: "all" }));
-  chips($("#sh-colors"), showPalettes.map((pl, i) => [pl.name, i]), showVar, v => {
-    showVar = +v; savePref("showvar", showVar);
-    // re-start the running programs with the new colors
-    p.runs.forEach(r => api("/api/program", { fixtures: r.fixtures, program: r.program, size: r.size, variation: showVar, speed: r.speed, music: r.music }));
-    showSig = ""; renderShow();
-  });
-  chips($("#sh-size"), SHOW_SIZES, showSize, v => {
-    showSize = +v; savePref("showsize", showSize);
-    sh.moves.forEach(r => api("/api/movement", { fixtures: r.fixtures, pattern: r.pattern, size: showSize, speed: r.speed, music: r.music }));
-    showSig = ""; renderShow();
-  });
-
-  $("#sh-groups").innerHTML = groups.map((g, gi) => groupCard(g, gi, p, sh)).join("");
-  groups.forEach((g, gi) => wireGroup(g, $(`#sh-groups .shgroup[data-g="${gi}"]`), p, sh));
+  renderLights(groups);
+  const panel = $("#sh-panel");
+  if (shSel === "all") renderEverything(panel, groups);
+  else renderLight(panel, groups.find(g => g.key === shSel));
 }
 
 function renderRig(sh) {
   const el = $("#sh-rig");
   el.classList.toggle("hidden", sh.rig_ok);
   if (sh.rig_ok) return;
-  el.innerHTML = `<div class="fhead"><b>Set the app up for your lights?</b></div>
-    <p>This loads your rig: <b>Spots at DMX 1</b>, <b>Chauvet wash at DMX 17</b> and <b>Spider at DMX 34</b>, and switches the uplights off so they don't clash. It replaces what is in the Patch tab now.</p>
-    <button id="sh-loadrig" class="big ${rigArmed ? "danger" : "primary"}">${rigArmed ? "Tap again to replace the patch" : "Load my rig"}</button>
+  el.innerHTML = `<div><b>Set the app up for your lights?</b>
+    <p>Spots on DMX 1, Chauvet wash on 17, Spider on 34. The uplights get switched off.</p></div>
+    <button id="sh-loadrig" class="${rigArmed ? "danger" : "primary"}">${rigArmed ? "Tap again to confirm" : "Set up my lights"}</button>
     ${rigArmed ? `<button id="sh-rigcancel">Cancel</button>` : ""}`;
   $("#sh-loadrig").onclick = async () => {
     if (!rigArmed) { rigArmed = true; showSig = ""; renderShow(); return; }
@@ -179,76 +180,133 @@ function renderRig(sh) {
   if (rigArmed) $("#sh-rigcancel").onclick = () => { rigArmed = false; showSig = ""; renderShow(); };
 }
 
+function renderLights(groups) {
+  const el = $("#sh-lights");
+  const anyOn = groups.filter(g => g.on);
+  el.innerHTML = `<button class="sh-light ${shSel === "all" ? "sel" : ""}" data-k="all">
+      <span class="sh-dots">${anyOn.slice(0, 3).map(g => `<i class="sh-glow" data-i="${g.list[0].index}" style="--lc:${glow(g.list[0].index)}"></i>`).join("")}</span>
+      <span class="sh-lname">Everything</span><span class="sh-ldo">All lights together</span></button>` +
+    groups.map(g => `<button class="sh-light ${shSel === g.key ? "sel" : ""} ${g.on ? "" : "off"}" data-k="${esc(g.key)}">
+      <i class="sh-glow" data-i="${g.list[0].index}" style="--lc:${glow(g.list[0].index)}"></i>
+      <span class="sh-lname">${esc(g.name)}</span><span class="sh-ldo">${esc(doing(g))}</span></button>`).join("");
+  $$(".sh-light", el).forEach(b => b.onclick = () => { shSel = b.dataset.k; savePref("showsel", shSel); showSig = ""; renderShow(); });
+}
+
+// a row of choices where one is lit
+function choices(name, items, current) {
+  return `<div class="sh-choices" data-name="${name}">${items.map(([label, v]) =>
+    `<button class="${String(v) === String(current) ? "on" : ""}" data-v="${esc(v)}">${esc(label)}</button>`).join("")}</div>`;
+}
+function onChoice(el, name, fn) { $$(`.sh-choices[data-name="${name}"] button`, el).forEach(b => b.onclick = () => fn(b.dataset.v)); }
+
+function swatches() {
+  return `<div class="sh-swatches">${SHOW_COLORS.map(([n, css]) => `<button class="sh-sw" data-color="${n}" style="--pc:${css}" title="${n}" aria-label="${n}"></button>`).join("")}</div>`;
+}
+
+function section(title, body, note) {
+  return `<section class="sh-sec"><h3>${title}${note ? ` <small>${note}</small>` : ""}</h3>${body}</section>`;
+}
+
+function renderEverything(panel, groups) {
+  const p = state.perform, sh = state.show;
+  const colorGroups = groups.filter(g => g.color && g.on), moveGroups = groups.filter(g => g.moving && g.on);
+  const colorIdx = colorGroups.flatMap(g => g.idx), moveIdx = moveGroups.flatMap(g => g.idx);
+  const progs = colorGroups.map(g => (showRunFor(g, p.runs) || {}).program || "");
+  const moves = moveGroups.map(g => (showRunFor(g, sh.moves) || {}).pattern || "");
+  const same = list => list.length && list.every(x => x === list[0]) ? list[0] : "?";
+  const curProg = same(progs), curMove = same(moves);
+
+  let html = `<div class="sh-phead"><div><h2>Everything</h2><p>These buttons change all your lights at once.</p></div></div>`;
+  if (colorIdx.length) {
+    html += section("Color", swatches());
+    html += section("Effect", choices("fx", [["None", ""], ...showPrograms.map(x => [x.name, x.id])], curProg));
+    if (curProg && curProg !== "?") html += section("Effect colors", choices("pal", showPalettes.map((pl, i) => [pl.name, i]), showVar));
+  }
+  if (moveIdx.length) {
+    html += section("Movement", choices("mv", [["None", ""], ...sh.movements.map(x => [x.name, x.id])], curMove));
+    if (curMove && curMove !== "?") html += section("How far they move", choices("size", SHOW_SIZES, showSize));
+  }
+  if (!colorIdx.length && !moveIdx.length) html += `<p class="sh-empty">All lights are switched off. Pick a light above to turn it on.</p>`;
+  panel.innerHTML = html;
+
+  $$("[data-color]", panel).forEach(b => b.onclick = () => sendShowColor(colorIdx, b.dataset.color));
+  onChoice(panel, "fx", v => v ? startProgram(colorIdx, v) : api("/api/program/stop", { fixtures: "all" }));
+  onChoice(panel, "mv", v => v ? startMove(moveIdx, v) : api("/api/movement/stop", { fixtures: "all" }));
+  wirePalSize(panel);
+}
+
+function wirePalSize(panel) {
+  const p = state.perform, sh = state.show;
+  onChoice(panel, "pal", v => {
+    showVar = +v; savePref("showvar", showVar);
+    p.runs.forEach(r => api("/api/program", { fixtures: r.fixtures, program: r.program, size: r.size, variation: showVar, speed: r.speed, music: r.music }));
+    showSig = ""; renderShow();
+  });
+  onChoice(panel, "size", v => {
+    showSize = +v; savePref("showsize", showSize);
+    sh.moves.forEach(r => api("/api/movement", { fixtures: r.fixtures, pattern: r.pattern, size: showSize, speed: r.speed, music: r.music }));
+    showSig = ""; renderShow();
+  });
+}
+
 function chanSlider(g, ch, i, label) {
   const v = g.list[0].values[i];
-  return `<label class="shslider"><span>${esc(label || ch.name)} <em>ch ${i + 1}</em></span>
+  return `<label class="sh-slider"><span>${esc(label || ch.name)}<em>ch ${i + 1}</em></span>
     <input type="range" min="0" max="255" value="${v}" data-ch="${i}"><b>${v}</b></label>`;
 }
 
-function groupCard(g, gi, p, sh) {
-  const f0 = g.list[0];
+function renderLight(panel, g) {
+  const p = state.perform, sh = state.show, f0 = g.list[0], chans = f0.channels;
   const run = showRunFor(g, p.runs), move = showRunFor(g, sh.moves);
-  const level = f0.brightness;
-  const chans = f0.channels;
-  let body = "";
-  if (g.on) {
-    body += `<label class="shslider shlevel"><span>Brightness</span><input type="range" min="0" max="100" value="${level}" data-level><b>${level}%</b></label>`;
-    if (g.color) {
-      body += `<div class="shsub">Color</div><div class="shswatches">${SHOW_COLORS.map(([n, css]) => `<button class="shsw" data-color="${n}" style="--pc:${css}" title="${n}"><span>${n}</span></button>`).join("")}</div>`;
-      body += `<div class="shsub">Effect</div><div class="chips shfx"><button class="chip ${run ? "" : "on"}" data-fx="">Still</button>${showPrograms.map(pr => `<button class="chip ${run && run.program === pr.id ? "on" : ""}" data-fx="${pr.id}">${esc(pr.name)}</button>`).join("")}</div>`;
-    }
-    chans.forEach((ch, i) => {
-      if (ch.type === "color" || ch.type === "gobo") {
-        body += `<div class="shsub">${ch.type === "color" ? "Color wheel" : "Gobo (pattern)"}</div>`;
-        if (ch.stops && ch.stops.length) body += `<div class="chips">${ch.stops.map(st => `<button class="chip ${f0.values[i] === st.value ? "on" : ""}" data-ch="${i}" data-v="${st.value}">${esc(st.name)}</button>`).join("")}</div>`;
-        body += chanSlider(g, ch, i, "Position");
-      }
-    });
-    if (g.moving) {
-      body += `<div class="shsub">Movement</div><div class="chips shmv"><button class="chip ${move ? "" : "on"}" data-mv="">Still</button>${sh.movements.map(mv => `<button class="chip ${move && move.pattern === mv.id ? "on" : ""}" data-mv="${mv.id}">${esc(mv.name)}</button>`).join("")}</div>`;
-      body += `<div class="shsub">Aim${move ? " <small>(it moves around this point)</small>" : ""}</div>`;
-      chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") body += chanSlider(g, ch, i); });
-      body += `<button class="shcenter" data-center>Aim at the middle</button>`;
-    }
-    body += `<details class="shall"><summary>Every channel of this light (${chans.length})</summary>${chans.map((ch, i) => chanSlider(g, ch, i)).join("")}</details>`;
-    if (f0.profile === "spider-10ch") body += `<p class="hint">The spider's channels are a best guess for 10-channel spiders. If something does the wrong thing, check it in Channel sweep and tell me what each channel does.</p>`;
-    if (f0.profile === "gobo-spot-11ch") body += `<p class="hint">Checked: ch 1 up/down, ch 3 left/right, ch 6 brightness. The color wheel, gobo and strobe channels are the usual layout for these spots, not checked yet.</p>`;
-  } else {
-    const clash = state.conflicts.length && g.key === "freedom-flex-h4-ip" ? " Their addresses overlap your other lights, so they are off." : "";
-    body = `<p class="hint">Switched off.${clash}</p>`;
+  let html = `<div class="sh-phead">
+      <i class="sh-glow big" data-i="${f0.index}" style="--lc:${glow(f0.index)}"></i>
+      <div><h2>${esc(g.name)}</h2><p>${esc(g.where)}${g.list.length > 1 ? ` · ${g.list.length} lights` : ""}</p></div>
+      <button class="sh-switch ${g.on ? "on" : ""}" data-onoff><span></span>${g.on ? "On" : "Off"}</button>
+    </div>`;
+  if (!g.on) {
+    html += `<p class="sh-empty">This light is switched off.${g.key === "freedom-flex-h4-ip" ? " Its addresses overlap your other lights, so leave it off unless you re-patch it." : ""}</p>`;
+    panel.innerHTML = html;
+    $("[data-onoff]", panel).onclick = () => api("/api/show/group", { fixtures: g.idx, on: true });
+    return;
   }
-  return `<div class="shgroup ${g.on ? "" : "off"}" data-g="${gi}">
-    <div class="shhead">
-      <i class="shglow" data-i="${f0.index}" style="--lc:${glow(f0.index)}"></i>
-      <div class="shname"><b>${esc(g.name)}</b><span>${esc(g.where)} · ${g.chans} channels · ${esc(g.profileName)}</span></div>
-      <button class="shonoff ${g.on ? "on" : ""}" data-onoff>${g.on ? "ON" : "OFF"}</button>
-    </div>${body}</div>`;
-}
+  html += `<label class="sh-slider sh-level"><span>Brightness</span><input type="range" min="0" max="100" value="${f0.brightness}" data-level><b>${f0.brightness}%</b></label>`;
+  if (g.color) {
+    html += section("Color", swatches());
+    html += section("Effect", choices("fx", [["None", ""], ...showPrograms.map(x => [x.name, x.id])], run ? run.program : ""));
+    if (run) html += section("Effect colors", choices("pal", showPalettes.map((pl, i) => [pl.name, i]), showVar));
+  }
+  const wheel = chans.findIndex(c => c.type === "color"), gobo = chans.findIndex(c => c.type === "gobo");
+  if (wheel >= 0 || gobo >= 0) {
+    html += section("Color and pattern", (wheel >= 0 ? chanSlider(g, chans[wheel], wheel, "Color wheel") : "") + (gobo >= 0 ? chanSlider(g, chans[gobo], gobo, "Pattern (gobo)") : ""), "slide until you like it");
+  }
+  if (g.moving) {
+    html += section("Movement", choices("mv", [["None", ""], ...sh.movements.map(x => [x.name, x.id])], move ? move.pattern : ""));
+    if (move) html += section("How far it moves", choices("size", SHOW_SIZES, showSize));
+    let aim = "";
+    chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") aim += chanSlider(g, ch, i); });
+    html += section("Where it points", aim + `<button class="sh-link" data-center>Point at the middle</button>`, move ? "it moves around this spot" : "");
+  }
+  const guess = f0.profile === "spider-10ch" ? "These channels are a best guess for 10-channel spiders. If one does the wrong thing, tell me what it does."
+    : f0.profile === "gobo-spot-11ch" ? "Channels 1, 3 and 6 are checked. The others are the usual layout for these spots." : "";
+  html += `<details class="sh-more"><summary>Every channel (${chans.length})</summary>${guess ? `<p class="hint">${guess}</p>` : ""}${chans.map((ch, i) => chanSlider(g, ch, i)).join("")}</details>`;
+  panel.innerHTML = html;
 
-function wireGroup(g, el, p, sh) {
-  $("[data-onoff]", el).onclick = () => api("/api/show/group", { fixtures: g.idx, on: !g.on });
-  if (!g.on) return;
-  const lv = $("[data-level]", el);
+  $("[data-onoff]", panel).onclick = () => api("/api/show/group", { fixtures: g.idx, on: false });
+  const lv = $("[data-level]", panel);
   lv.oninput = () => { lv.nextElementSibling.textContent = lv.value + "%"; throttled("lvl" + g.key, () => api("/api/show/group", { fixtures: g.idx, level: +lv.value })); };
-  $$("[data-color]", el).forEach(b => b.onclick = () => {
-    const [, , [r, gg, bb]] = SHOW_COLORS.find(c => c[0] === b.dataset.color);
-    const white = b.dataset.color === "White";
-    api("/api/color", { fixtures: g.idx, r: white ? 0 : r, g: white ? 0 : gg, b: white ? 0 : bb, w: white ? 255 : 0, a: 0, uv: 0, fade: 0.3 });
-  });
-  $$("[data-fx]", el).forEach(b => b.onclick = () => b.dataset.fx ? startProgram(g.idx, b.dataset.fx) : api("/api/program/stop", { fixtures: g.idx }));
-  $$("[data-mv]", el).forEach(b => b.onclick = () => b.dataset.mv ? startMove(g.idx, b.dataset.mv) : api("/api/movement/stop", { fixtures: g.idx }));
+  $$("[data-color]", panel).forEach(b => b.onclick = () => sendShowColor(g.idx, b.dataset.color));
+  onChoice(panel, "fx", v => v ? startProgram(g.idx, v) : api("/api/program/stop", { fixtures: g.idx }));
+  onChoice(panel, "mv", v => v ? startMove(g.idx, v) : api("/api/movement/stop", { fixtures: g.idx }));
+  wirePalSize(panel);
   const setCh = (i, v) => Promise.all(g.idx.map(fi => api("/api/fixture", { index: fi, values: { [i + 1]: v } })));
-  $$("input[data-ch]", el).forEach(inp => inp.oninput = () => {
-    inp.nextElementSibling.textContent = inp.value;
-    // keep the same channel's other sliders (in "every channel") in step
-    $$(`input[data-ch="${inp.dataset.ch}"]`, el).forEach(o => { if (o !== inp) { o.value = inp.value; o.nextElementSibling.textContent = inp.value; } });
+  $$("input[data-ch]", panel).forEach(inp => inp.oninput = () => {
+    $$(`input[data-ch="${inp.dataset.ch}"]`, panel).forEach(o => { o.value = inp.value; o.nextElementSibling.textContent = inp.value; });
     throttled(`ch${g.key}:${inp.dataset.ch}`, () => setCh(+inp.dataset.ch, +inp.value));
   });
-  $$("button[data-ch]", el).forEach(b => b.onclick = () => setCh(+b.dataset.ch, +b.dataset.v));
-  const c = $("[data-center]", el);
+  const c = $("[data-center]", panel);
   if (c) c.onclick = () => {
     const vals = {};
-    g.list[0].channels.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") vals[i + 1] = 128; });
+    chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") vals[i + 1] = 128; });
     Promise.all(g.idx.map(fi => api("/api/fixture", { index: fi, values: vals })));
   };
 }

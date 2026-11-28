@@ -94,7 +94,7 @@ channel map in the Patch tab or make a preset in **Fixture presets**. The old
 
 ## Pages
 
-- **Show** (the default): one screen for running the night. At the top:
+- **Show** (the default; the other tabs are behind **More**): pick a light at the top (or Everything) and the panel below shows only what that light can do. At the top:
   BLACKOUT, FLASH (hold), strobe, a level for all lights, and one **Speed**
   slider (Slow to Fast, or Follow the beat with TAP) that changes everything
   that is running. Then party programs for every color light and movement
