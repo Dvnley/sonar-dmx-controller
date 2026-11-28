@@ -24,7 +24,7 @@ func TestSaveProfileAppliesAndPersists(t *testing.T) {
 	}
 	spot := -1
 	for i, f := range c.State().Fixtures {
-		if f.Profile == "spot-9ch" {
+		if f.Profile == "gobo-spot-11ch" {
 			spot = i
 		}
 	}

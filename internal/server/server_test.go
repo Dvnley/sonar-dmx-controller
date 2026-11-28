@@ -173,7 +173,7 @@ func TestProgramEndpoints(t *testing.T) {
 	if code, _ := do(t, h, "POST", "/api/beat", `{"source":"tap"}`); code != 204 {
 		t.Errorf("beat: %d", code)
 	}
-	if code, out := do(t, h, "GET", "/api/programs", ""); code != 200 || len(out["programs"].([]any)) != 10 {
+	if code, out := do(t, h, "GET", "/api/programs", ""); code != 200 || len(out["programs"].([]any)) != len(controller.Programs) {
 		t.Errorf("programs: %d %v", code, out)
 	}
 	if code, _ := do(t, h, "POST", "/api/program", `{"program":"nope"}`); code != 400 {
@@ -184,14 +184,14 @@ func TestProgramEndpoints(t *testing.T) {
 func TestProfileEndpoints(t *testing.T) {
 	c, _ := controller.New("", nopNet{})
 	h := New(c, Options{})
-	code, out := do(t, h, "POST", "/api/profile", `{"profile":{"name":"Test Spot","modes":[{"name":"2CH","channels":[{"name":"Pan","type":"pan"},{"name":"Dim","type":"dimmer"}]}]},"apply":[7]}`)
+	code, out := do(t, h, "POST", "/api/profile", `{"profile":{"name":"Test Spot","modes":[{"name":"2CH","channels":[{"name":"Pan","type":"pan"},{"name":"Dim","type":"dimmer"}]}]},"apply":[1]}`)
 	if code != 200 {
 		t.Fatalf("save: %d %v", code, out)
 	}
 	if out["profile"].(map[string]any)["id"] != "custom-test-spot" {
 		t.Fatalf("save: %v", out["profile"])
 	}
-	fx := out["state"].(map[string]any)["fixtures"].([]any)[7].(map[string]any)
+	fx := out["state"].(map[string]any)["fixtures"].([]any)[1].(map[string]any)
 	if fx["profile"] != "custom-test-spot" || len(fx["channels"].([]any)) != 2 {
 		t.Fatalf("apply: %v", fx)
 	}

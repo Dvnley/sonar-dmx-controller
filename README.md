@@ -67,28 +67,85 @@ for installing it with Xcode and connecting the AN2.
 
 | Fixture | Profile | Mode | Universe | Address |
 | --- | --- | --- | --- | --- |
-| Uplight 1-6 | Chauvet Freedom Flex H4 IP | 6CH (R G B A W UV) | 0 | 1, 7, 13, 19, 25, 31 |
-| Wash FX | Chauvet Wash FX | 3CH (R G B) | 0 | 17 |
-| Spot | Generic moving-head spot | 9CH | 0 | 1 |
+| Spots | Gobo moving-head spot | 11CH | 0 | 1 |
+| Chauvet wash | Chauvet wash | 3CH (R G B) | 0 | 17 |
+| Spider | Spider moving wash | 10CH | 0 | 34 |
+| Uplight 1-6 (off) | Chauvet Freedom Flex H4 IP | 6CH (R G B A W UV) | 0 | 1, 7, 13, 19, 25, 31 |
 
-**These addresses overlap.** The uplights cover 1-36, which collides with the
-spot (1-9) and the wash (17-19). The app shows a warning until one group is
-moved, either to free addresses (for example uplights at 41 and up) or to
-universe 1. Where fixtures overlap, the highest value wins on each channel.
+Lights of one type share an address, so one patch line drives them all. The
+uplights stay in the patch but are switched off, because 1-36 overlaps the
+others. An older config keeps its own patch: the Show tab offers **Load my
+rig** to switch to this one.
 
-The Wash FX mode was inferred from a test (sending 255 on channel 19 turned it
-blue). The spot's channel layout is a guess for a common cheap 9CH head:
+Spot channels, 10CH (checked on the rig: 1, 3, 6, 9 and 10; the rest is the
+usual layout for these spots):
 
-1 Pan · 2 Tilt · 3 Color wheel · 4 Gobo · 5 Shutter/strobe · 6 Dimmer ·
-7 Pan/tilt speed · 8 Auto/sound · 9 Reset
+1 Up/down · 2 Up/down fine · 3 Left/right · 4 Left/right fine · 5 Move speed ·
+6 Brightness · 7 Strobe · 8 not checked · 9 Color wheel · 10 Pattern spin/spread
 
-There is a second mode with dimmer and shutter swapped. If neither matches,
-make your own sliders in the **Fixture presets** tab (see below) and apply
-them to the spots.
+Configs saved with the first 11CH guess are moved to this layout on launch.
+
+Spider channels, 10CH (checked on the rig, except 1 and 10):
+
+1 not known · 2 Red · 3 Green · 4 Blue · 5 White · 6 Amber · 7 UV ·
+8 Strobe · 9 Party mode · 10 not known
+
+Configs saved with the first spider guess are moved to this layout on launch.
+
+If a light does the wrong thing, check it in **Channel sweep** and fix its
+channel map in the Patch tab or make a preset in **Fixture presets**. The old
+9CH spot profile is still there.
+
+## Auto mode
+
+The big **Auto** button on the Show tab lets the music run the lights. In the
+browser on the Mac it listens with the Mac's mic: quiet music gets slow, calm
+looks and loud music gets fast, busy ones. It changes look every phrase (32
+beats, or about 25 seconds), jumps straight to a big look when the music
+drops, and gives the room to the spots (a spotlight moment) when a loud part
+suddenly goes quiet. **Mic sensitivity** sets how loud counts as loud. With no
+mic (on a phone or iPad) Auto still changes looks by itself at the Speed
+slider's pace. Blackout still works while Auto is on; picking a look by hand,
+or the schedule playing one, turns Auto off. The mic has to stay on, so keep
+the browser page on the Mac open.
+
+While it listens, a live picture shows what the mic hears: the bars are the
+sound from bass to treble, the white line is the loudness, the dot flashes on
+each hit and the big circle pulses on each beat, with the BPM underneath. If
+it says it can't hear anything, turn the music up, move the Mac nearer or
+raise the sensitivity. The beat finder only sends steady beats, so a noisy
+room doesn't make the lights stutter.
+
+On the Show tab the **Looks** row plays any saved look with one tap
+(**+ New looks** adds ready-made ones you don't have yet, such as *Under
+water*). Keys on the Mac: **A** Auto, **B** Blackout, **F** Flash (hold),
+**S** Strobe, **1-9** the first nine looks.
+
+**More tools on the Show tab:**
+- **Hold for color**: hold White, Red, Blue, Green, UV or Amber and every light goes that color until you let go (keys: hold W, R, U).
+- **Strobe speed**: Slow, Medium or Fast for the Strobe button.
+- **Looks bar**: pick how looks come in (Snap, Fade, Slow fade), **Back** returns to what was on before the last look (key Z, press again to go forward), and **+ Save what's on** saves the current lights as a look.
+- **Aim the spots**: in the Spots panel, drag on the square to point them, tap Middle, or save places like "Dance floor" and tap them later. Movements keep running around the aim.
+- **Check my lights**: walks each light through red, green, blue and white, and the spots through middle, left, right and both tilts, one light at a time, so you can see before a gig that everything answers.
+- **Auto in the schedule**: a schedule line can be "Auto (follows the music)", and Auto stays on after the app restarts until you turn it off.
+
+The **Water** effect ripples blue and white through the lights, with the
+white crests on the spider's own white channel.
 
 ## Pages
 
-- **Perform** (the default, built for the iPad). Pick a layout at the top:
+- **Show** (the default; the other tabs are behind **More**): pick a light at the top (or Everything) and the panel below shows only what that light can do. At the top:
+  BLACKOUT, FLASH (hold), strobe, a level for all lights, and one **Speed**
+  slider (Slow to Fast, or Follow the beat with TAP) that changes everything
+  that is running. Then party programs for every color light and movement
+  patterns (Circle, Side to side, Up and down, Figure 8, Wander) for every
+  moving light. Below, one box per light type (Spots, Chauvet wash, Spider)
+  with its DMX address, on/off, brightness, colors, its own effect and
+  movement, aim sliders named for what they do, and every channel with its
+  number. The last button, **Schedule**, saves the current look by name and
+  plays looks (or Lights off) at set times, every day or on chosen days.
+- **Faders**: every DMX channel 1-512 by hand, 16 at a time like a hardware desk, labelled with the light and what the channel does. A moved fader overrides the app on that channel until you tap Auto or hand everything back. Blackout still wins. Also says plainly whether the Mac can reach the AN2.
+- **Perform** (built for the iPad). Pick a layout at the top:
   - **Groups**: a column per fixture type (uplights, wash, spot) with color
     pads, a level fader, a FLASH button for just that group and a Programs
     button. The spot column has a pan/tilt pad and a dimmer instead.
@@ -149,8 +206,22 @@ them to the spots.
 
 ## API
 
+Tools: `POST /api/hit {on, color}`, `/api/show/aim {fixtures, x, y}`, `/api/aim/save {name, remove}`, `/api/undo`, `/api/check {stop}`.
+
+Auto: `POST /api/auto {on, sensitivity}`, `POST /api/auto/level {level}` (mic RMS 0-1, a few times a second).
+
 All POST bodies are JSON. Every POST returns the full state (like
 `GET /api/state`) or `{"error": "..."}` with status 400.
+
+Show mode endpoints:
+
+| Endpoint | Body | Notes |
+| --- | --- | --- |
+| `POST /api/movement` | `{"fixtures", "pattern", "speed", "size", "music"}` | patterns: circle, sweep, nod, figure8, wander; moves around the aim |
+| `POST /api/movement/stop` | `{"fixtures"}` | back to the aim |
+| `POST /api/show/speed` | `{"speed", "music"}` | 0-100, applied to every program and movement without restarting them |
+| `POST /api/show/group` | `{"fixtures", "on", "level"}` | turning on opens a closed brightness channel |
+| `POST /api/show/setup` | `{}` | loads the default patch above |
 
 v0.2 endpoints:
 

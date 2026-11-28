@@ -10,7 +10,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;"
 let state = null;
 let diag = null;
 let profiles = [];
-let tab = "perform";
+let tab = "show";
 let cardSig = "";
 let patchDraft = null;
 let patchDirty = false;
@@ -69,9 +69,15 @@ document.addEventListener("pointerup", () => { dragging = 0; });
 document.addEventListener("pointercancel", () => { dragging = 0; });
 
 // ---------- tabs ----------
-$$("nav button").forEach(b => b.onclick = () => {
+// The Show tab is all most nights need; the other tabs sit behind "More".
+const setMore = on => { document.body.classList.toggle("showall", on); $("#more").textContent = on ? "Less" : "More"; savePref("more", on); };
+setMore(loadPref("more", false));
+document.body.dataset.tab = "show";
+$("#more").onclick = () => setMore(!document.body.classList.contains("showall"));
+$$("nav button[data-tab]").forEach(b => b.onclick = () => {
   tab = b.dataset.tab;
-  $$("nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.body.dataset.tab = tab;
+  $$("nav button[data-tab]").forEach(x => x.classList.toggle("active", x === b));
   $$(".tab").forEach(s => s.classList.toggle("hidden", s.id !== "tab-" + tab));
   if (tab === "patch" && !patchDirty) resetDraft();
   if (tab === "presets" && window.openPresets) openPresets();
@@ -90,6 +96,8 @@ function render() {
   renderSetup();
   if (tab === "presets" && window.renderPresets) renderPresets();
   if (window.renderMoods) renderMoods();
+  if (window.renderShow) renderShow();
+  if (window.renderFaders) renderFaders();
 }
 
 let conflictHTML = "";

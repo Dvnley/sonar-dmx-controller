@@ -108,10 +108,34 @@ var Profiles = []Profile{
 		}}},
 	},
 	{
-		ID: "wash-fx", Name: "Chauvet Wash FX", Kind: "color",
-		Notes: "3CH RGB inferred from the red test turning the wash blue. Check the mode on the fixture's display.",
+		ID: "wash-fx", Name: "Chauvet wash", Kind: "color",
+		Notes: "3CH RGB: ch 1 red, ch 2 green, ch 3 blue (checked on the rig).",
 		Modes: []Mode{{Name: "3CH", Channels: []Channel{
 			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0),
+		}}},
+	},
+	{
+		ID: "gobo-spot-11ch", Name: "Gobo moving-head spot", Kind: "moving",
+		Notes: "Danley's spots, 10CH: ch 1 up/down, 3 left/right, 6 brightness, 9 color wheel, 10 pattern spin/spread (checked on the rig). " +
+			"Channels 2, 4, 5, 7 and 8 follow the usual layout of these lights and are not checked yet.",
+		Modes: []Mode{{Name: "10CH", Channels: []Channel{
+			ch("Up / down", Tilt, 128), ch("Up / down fine", TiltFine, 0),
+			ch("Left / right", Pan, 128), ch("Left / right fine", PanFine, 0),
+			ch("Move speed", Speed, 0), ch("Brightness", Dimmer, 255),
+			ch("Strobe", Shutter, 0), ch("Ch 8 (not checked)", Generic, 0),
+			ch("Color wheel", Color, 0), ch("Pattern spin / spread", Gobo, 0),
+		}}},
+	},
+	{
+		ID: "spider-10ch", Name: "Spider wash", Kind: "color",
+		Notes: "Danley's spiders, 10CH, checked on the rig: 2 red, 3 green, 4 blue, 5 white, 6 amber, 7 UV, 8 strobe, 9 party/auto. " +
+			"Channels 1 and 10 did nothing visible in the check.",
+		Modes: []Mode{{Name: "10CH", Channels: []Channel{
+			ch("Ch 1 (not checked)", Generic, 128),
+			ch("Red", Red, 0), ch("Green", Green, 0), ch("Blue", Blue, 0),
+			ch("White", White, 0), ch("Amber", Amber, 0), ch("UV", UV, 0),
+			ch("Strobe", Shutter, 0), ch("Party mode", Auto, 0),
+			ch("Ch 10 (not checked)", Generic, 0),
 		}}},
 	},
 	{

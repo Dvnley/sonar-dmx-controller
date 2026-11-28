@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 
 	"github.com/dvnley/sonar-dmx-controller/internal/controller"
 	"github.com/dvnley/sonar-dmx-controller/internal/fixture"
@@ -256,6 +257,76 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 		result(w, c, err)
 	})
+	mux.HandleFunc("POST /api/hit", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On       bool            `json:"on"`
+			Color    string          `json:"color"`
+			Fixtures json.RawMessage `json:"fixtures"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.SetHit(body.On, body.Color, targets)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/show/aim", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			X        float64         `json:"x"`
+			Y        float64         `json:"y"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.SetAim(targets, body.X, body.Y)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/aim/save", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Name   string `json:"name"`
+			Remove bool   `json:"remove"`
+		}
+		if decode(w, r, &body) {
+			result(w, c, c.SaveAim(body.Name, body.Remove))
+		}
+	})
+	mux.HandleFunc("POST /api/undo", func(w http.ResponseWriter, r *http.Request) {
+		result(w, c, c.Undo())
+	})
+	mux.HandleFunc("POST /api/check", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Stop bool `json:"stop"`
+		}
+		if decode(w, r, &body) {
+			c.StartCheck(body.Stop)
+			result(w, c, nil)
+		}
+	})
+	mux.HandleFunc("POST /api/auto", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			On          *bool `json:"on"`
+			Sensitivity *int  `json:"sensitivity"`
+		}
+		if decode(w, r, &body) {
+			c.SetAuto(body.On, body.Sensitivity)
+			result(w, c, nil)
+		}
+	})
+	mux.HandleFunc("POST /api/auto/level", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Level float64 `json:"level"`
+		}
+		if decode(w, r, &body) {
+			c.AutoLevel(body.Level)
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
 	mux.HandleFunc("POST /api/beat", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Source string `json:"source"`
@@ -279,6 +350,86 @@ func New(c *controller.Controller, opts Options) http.Handler {
 			err = c.SetGroup(targets, body.Brightness, body.Enabled)
 		}
 		result(w, c, err)
+	})
+	// show mode
+	mux.HandleFunc("POST /api/movement", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			controller.MoveRun
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StartMovement(targets, body.MoveRun)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/movement/stop", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.StopMovement(targets)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/show/speed", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Speed float64 `json:"speed"`
+			Music bool    `json:"music"`
+		}
+		if decode(w, r, &body) {
+			c.SetShowSpeed(body.Speed, body.Music)
+			result(w, c, nil)
+		}
+	})
+	mux.HandleFunc("POST /api/show/group", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Fixtures json.RawMessage `json:"fixtures"`
+			On       *bool           `json:"on"`
+			Level    *int            `json:"level"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		targets, err := parseTargets(body.Fixtures)
+		if err == nil {
+			err = c.ShowGroup(targets, body.On, body.Level)
+		}
+		result(w, c, err)
+	})
+	mux.HandleFunc("POST /api/faders", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Universe int            `json:"universe"`
+			Values   map[string]int `json:"values"`  // channel -> value
+			Release  []int          `json:"release"` // channels to hand back
+			All      bool           `json:"release_all"`
+		}
+		if !decode(w, r, &body) {
+			return
+		}
+		vals := map[int]int{}
+		for k, v := range body.Values {
+			n, err := strconv.Atoi(k)
+			if err != nil {
+				fail(w, http.StatusBadRequest, "channel "+k+" is not a number")
+				return
+			}
+			vals[n] = v
+		}
+		if body.All || len(body.Release) > 0 {
+			c.ReleaseFaders(body.Universe, body.Release)
+		}
+		result(w, c, c.SetFaders(body.Universe, vals))
+	})
+	mux.HandleFunc("POST /api/show/setup", func(w http.ResponseWriter, r *http.Request) {
+		result(w, c, c.SetupRig())
 	})
 	mux.HandleFunc("POST /api/position", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -344,8 +495,12 @@ func New(c *controller.Controller, opts Options) http.Handler {
 		}
 	})
 	mux.HandleFunc("GET /api/remote", func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]any{"enabled": opts.PIN != "", "urls": opts.URLs}
-		if opts.URLs == nil {
+		urls := opts.URLs
+		if opts.LiveURLs != nil {
+			urls = opts.LiveURLs()
+		}
+		info := map[string]any{"enabled": opts.PIN != "", "urls": urls}
+		if urls == nil {
 			info["urls"] = []string{}
 		}
 		if isLocal(r) {

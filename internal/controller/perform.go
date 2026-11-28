@@ -115,6 +115,7 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 		}
 	}
 	c.applyCycle(fixtures, now)
+	c.applyMoves(fixtures, now)
 	c.applyPrograms(fixtures, now)
 	if c.dark {
 		for i := range fixtures {
@@ -128,10 +129,14 @@ func (c *Controller) performLook(now time.Time) ([]fixture.Fixture, fixture.Outp
 	c.applyPulse(fixtures, now)
 	if !c.flashUntil.IsZero() {
 		if now.Before(c.flashUntil) {
-			if c.flashOnly == nil {
-				return testLook(fixtures, "white"), fixture.Output{Master: 100}
+			col := c.flashColor
+			if col == "" {
+				col = "white"
 			}
-			white := testLook(fixtures, "white")
+			if c.flashOnly == nil {
+				return testLook(fixtures, col), fixture.Output{Master: 100}
+			}
+			white := testLook(fixtures, col)
 			for i := range fixtures {
 				if c.flashOnly[i] {
 					fixtures[i] = white[i]
@@ -202,6 +207,7 @@ func (c *Controller) SetFlash(on bool, targets []int) {
 			c.flashOnly[i] = true
 		}
 	}
+	c.flashColor = "white"
 	if on {
 		c.flashUntil = c.now().Add(flashTimeout)
 	} else {

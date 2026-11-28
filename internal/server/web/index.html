@@ -12,16 +12,19 @@
 </head>
 <body>
 <header>
-  <h1>Sonar DMX <span class="ver">v0.3</span></h1>
+  <h1>Sonar DMX</h1>
   <div id="status" class="pill">checking…</div>
   <nav>
-    <button data-tab="perform" class="active">Perform</button>
-    <button data-tab="moods">Moods &amp; schedule</button>
-    <button data-tab="live">Fixtures</button>
-    <button data-tab="patch">Patch</button>
-    <button data-tab="presets">Fixture presets</button>
-    <button data-tab="sweep">Channel sweep</button>
-    <button data-tab="setup">Setup</button>
+    <button data-tab="show" class="active">Show</button>
+    <button data-tab="faders">Faders</button>
+    <button class="adv" data-tab="perform">Perform</button>
+    <button class="adv" data-tab="moods">Moods &amp; schedule</button>
+    <button class="adv" data-tab="live">Fixtures</button>
+    <button class="adv" data-tab="patch">Patch</button>
+    <button class="adv" data-tab="presets">Fixture presets</button>
+    <button class="adv" data-tab="sweep">Channel sweep</button>
+    <button class="adv" data-tab="setup">Setup</button>
+    <button id="more" class="morebtn">More</button>
   </nav>
 </header>
 
@@ -30,8 +33,103 @@
 <div id="error" class="banner err hidden"></div>
 
 <main>
+<!-- SHOW -->
+<section id="tab-show" class="tab">
+  <div id="sh-conn" class="fd-conn hidden"></div>
+  <div id="sh-rig" class="sh-rig hidden"></div>
+  <div id="sh-check" class="sh-check hidden"></div>
+
+  <div class="sh-tips hidden" id="sh-tips">
+    <div>
+      <b>Quick start</b>
+      <ol>
+        <li><b>Tap a look</b> in the row below to play it.</li>
+        <li>Or tap <b>Auto</b> and play music: the lights follow it by themselves.</li>
+        <li>Tap <b>Spots</b>, <b>Chauvet wash</b> or <b>Spider</b> to change just that light.</li>
+        <li><b>Schedule</b> runs a whole night on its own, and can switch Auto on.</li>
+        <li>Before a gig, tap <b>Check my lights</b> at the bottom to see each light answer.</li>
+      </ol>
+      <p class="sh-keys">Keys on the Mac: <kbd>A</kbd> Auto · <kbd>B</kbd> Blackout · <kbd>F</kbd> Flash (hold) · <kbd>S</kbd> Strobe · <kbd>Z</kbd> Back · <kbd>1</kbd>–<kbd>9</kbd> looks · hold <kbd>W</kbd> <kbd>R</kbd> <kbd>U</kbd> for white, red, blue</p>
+    </div>
+    <button id="sh-tipsok" class="primary">Got it</button>
+  </div>
+
+  <div class="sh-auto" id="sh-auto">
+    <button id="sh-autobtn" class="sh-autobtn"><b>Auto</b><small id="sh-autosub">Let the music run the lights</small></button>
+    <div class="sh-autoinfo">
+      <div class="sh-meter"><i id="sh-autometer"></i></div>
+      <div id="sh-autotxt" class="sh-autotxt"></div>
+      <div class="sh-viz hidden"><canvas id="sh-viz"></canvas><span id="sh-vizt"></span></div>
+      <label class="sh-sens"><span>Mic sensitivity</span><input id="sh-autosens" type="range" min="0" max="100"><b id="sh-autosensv"></b></label>
+    </div>
+  </div>
+
+  <div class="sh-bar">
+    <div class="sh-hits">
+      <button id="sh-blackout" class="sh-bo">Blackout</button>
+      <button id="sh-flash" class="sh-hit">Flash <small>hold</small></button>
+      <button id="sh-strobe" class="sh-hit">Strobe</button>
+    </div>
+    <label class="sh-dial"><span>Brightness</span><input id="sh-master" type="range" min="0" max="100"><b id="sh-masterv"></b></label>
+    <label class="sh-dial"><span>Speed</span><input id="sh-speed" type="range" min="0" max="100"><b id="sh-speedword"></b></label>
+  </div>
+
+  <div class="sh-hitrow">
+    <span class="sh-qhead">Hold for color</span>
+    <button class="sh-chit" data-hit="white" style="--hc:#fff">White</button>
+    <button class="sh-chit" data-hit="red" style="--hc:#ff2a2a">Red</button>
+    <button class="sh-chit" data-hit="blue" style="--hc:#2a5bff">Blue</button>
+    <button class="sh-chit" data-hit="green" style="--hc:#2ad06a">Green</button>
+    <button class="sh-chit" data-hit="uv" style="--hc:#8a2bff">UV</button>
+    <button class="sh-chit" data-hit="amber" style="--hc:#ffa21a">Amber</button>
+    <span class="grow"></span>
+    <span class="sh-qhead">Strobe speed</span>
+    <div class="sh-seg" id="sh-strobespeed"><button data-hz="4">Slow</button><button data-hz="8">Medium</button><button data-hz="14">Fast</button></div>
+  </div>
+
+  <div class="sh-lookbar">
+    <span class="sh-qhead">Looks</span>
+    <div class="sh-seg" id="sh-fade" title="How long a look takes to fade in"><button data-fade="0">Snap</button><button data-fade="1.5">Fade</button><button data-fade="4">Slow fade</button></div>
+    <span class="grow"></span>
+    <button id="sh-undo" class="sh-small" title="Go back to what was on before">↶ Back</button>
+    <span id="sh-savewrap"><button id="sh-savenow" class="sh-small">+ Save what's on</button></span>
+  </div>
+  <div class="sh-qlooks" id="sh-qlooks"></div>
+
+  <div class="sh-lights" id="sh-lights"></div>
+
+  <div class="sh-panel" id="sh-panel"></div>
+
+  <div class="sh-foot">
+    <label class="sh-small sh-beat"><input type="checkbox" id="sh-music"> Follow the beat</label>
+    <button id="sh-tap" class="sh-small hidden">Tap to the beat</button>
+    <span class="sh-bpm" id="sh-bpm"></span>
+    <span class="grow"></span>
+    <button id="sh-checkbtn" class="sh-small">Check my lights</button>
+    <button id="sh-phone" class="sh-small">Use your phone</button>
+    <button id="sh-stopall" class="sh-small">Stop all effects</button>
+  </div>
+</section>
+
+<!-- FADERS -->
+<section id="tab-faders" class="tab hidden">
+  <div id="fd-conn" class="fd-conn"></div>
+  <div class="fd-top">
+    <div><h2>Faders</h2><p class="hint">Set any DMX channel by hand, 16 at a time, like your Monoprice desk. A fader you move stays where you put it until you tap <b>Auto</b> under it, or hand everything back.</p></div>
+  </div>
+  <div class="fd-pages" id="fd-pages"></div>
+  <div class="fd-bank" id="fd-bank"></div>
+  <div class="fd-foot">
+    <button id="fd-full">All 16 to full</button>
+    <button id="fd-zero">All 16 to zero</button>
+    <span class="grow"></span>
+    <span class="hint" id="fd-held"></span>
+    <button id="fd-release" class="primary">Hand everything back to the app</button>
+  </div>
+</section>
+
 <!-- LIVE -->
-<section id="tab-perform" class="tab">
+<section id="tab-perform" class="tab hidden">
   <div class="pbar">
     <div class="chips" id="views"><span class="chiplabel">Layout</span></div>
     <div class="chips" id="fades"><span class="chiplabel">Fade</span></div>
@@ -332,5 +430,7 @@
 <script src="views.js"></script>
 <script src="presets.js"></script>
 <script src="moods.js"></script>
+<script src="show.js"></script>
+<script src="faders.js"></script>
 </body>
 </html>

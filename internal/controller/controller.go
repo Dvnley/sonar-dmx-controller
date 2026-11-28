@@ -36,24 +36,36 @@ type Config struct {
 	// Moods are whole looks the schedule plays at set times.
 	Moods    []Mood   `json:"moods,omitempty"`
 	Schedule Schedule `json:"schedule"`
+	// AimPoints are saved places for the spots to point at.
+	AimPoints []AimPoint `json:"aim_points,omitempty"`
+	// AutoOn keeps Auto running after a restart.
+	AutoOn          bool `json:"auto_on,omitempty"`
+	AutoSensitivity *int `json:"auto_sensitivity,omitempty"`
 }
 
 // UplightProfile is the fixture the v0.2 "fixed 6-slot" API fields refer to.
 const UplightProfile = "freedom-flex-h4-ip"
 
-// DefaultConfig is the rig as it is patched today. The uplights at 1-36
-// overlap the spot (1-9) and the wash (17-19); the UI warns about it until
-// one group is re-patched.
+// DefaultConfig is Danley's rig: gobo spots at 1, the Chauvet washes at 17
+// and the spider washes at 34, all on universe 0. Fixtures of one type share
+// an address, so one patch entry drives them all. The Freedom Flex uplights
+// are not in it: Danley doesn't use them and their addresses overlap.
 func DefaultConfig() Config {
 	cfg := Config{TargetIP: "2.0.0.1", FPS: 40, Master: 100}
-	for i, addr := range []int{1, 7, 13, 19, 25, 31} {
-		f, _ := fixture.New(fmt.Sprintf("Uplight %d", i+1), UplightProfile, "6CH", 0, addr)
-		cfg.Fixtures = append(cfg.Fixtures, f)
-	}
-	wash, _ := fixture.New("Wash FX", "wash-fx", "3CH", 0, 17)
-	spot, _ := fixture.New("Spot", "spot-9ch", "", 0, 1)
-	cfg.Fixtures = append(cfg.Fixtures, wash, spot)
+	cfg.Fixtures = append(cfg.Fixtures, RigFixtures()...)
 	return cfg
+}
+
+// RigFixtures is the patch of DefaultConfig.
+func RigFixtures() []fixture.Fixture {
+	// Start in a color, so the lights show something the moment they are
+	// connected: blue wash, white spider.
+	wash, _ := fixture.New("Chauvet wash", "wash-fx", "3CH", 0, 17)
+	wash.Set(fixture.Blue, 255)
+	spot, _ := fixture.New("Spots", "gobo-spot-11ch", "", 0, 1)
+	spider, _ := fixture.New("Spider", "spider-10ch", "", 0, 34)
+	spider.Set(fixture.White, 255)
+	return []fixture.Fixture{wash, spot, spider}
 }
 
 // Sender is the Art-Net side, an interface so tests can capture frames.
@@ -72,8 +84,14 @@ type Controller struct {
 	blackout bool
 	testFrom time.Time
 	sweep    *Sweep
-	sendErr  string
-	saveT    *time.Timer
+	manual   map[int]map[int]uint8 // hand faders: universe -> channel -> value
+	auto     autoState
+	// tools
+	flashColor string
+	undo       *Mood
+	checkFrom  time.Time
+	sendErr    string
+	saveT      *time.Timer
 
 	fades        map[int]*fade
 	flashUntil   time.Time
@@ -83,6 +101,10 @@ type Controller struct {
 	strobeStart  time.Time
 	flashOnly    map[int]bool // nil: flash everything
 	runs         []*ProgramRun
+	moves        []*MoveRun
+	showSpeed    float64
+	showMusic    bool
+	showSpeedSet bool
 	live         []fixture.Fixture // last look sent, for the UI
 	beats        BeatClock
 	xfade        *crossfade // mood crossfade
@@ -107,6 +129,7 @@ var testColors = []string{"red", "green", "blue", "white"}
 // New loads the config at path, or starts from DefaultConfig if it is missing.
 func New(path string, sender Sender) (*Controller, error) {
 	c := &Controller{cfg: DefaultConfig(), path: path, Net: sender, now: time.Now, fades: map[int]*fade{}}
+	c.auto.sensitivity = 50
 	if path != "" {
 		data, err := os.ReadFile(path)
 		switch {
@@ -121,6 +144,9 @@ func New(path string, sender Sender) (*Controller, error) {
 		}
 	}
 	c.normalize()
+	if s := c.cfg.AutoSensitivity; s != nil {
+		c.auto.sensitivity = clamp(*s, 0, 100)
+	}
 	return c, nil
 }
 
@@ -133,8 +159,87 @@ func (c *Controller) normalize() {
 	}
 	c.cfg.Master = clamp(c.cfg.Master, 0, 100)
 	for i := range c.cfg.Fixtures {
-		c.cfg.Fixtures[i].Normalize()
+		f := &c.cfg.Fixtures[i]
+		// The spots turned out to be 10CH with the color wheel on 9 and the
+		// pattern spin on 10; patches saved with the first 11CH guess move
+		// over, keeping their values by channel type.
+		if f.Profile == "gobo-spot-11ch" && f.Mode == "11CH" {
+			p, _ := fixture.FindProfile(f.Profile)
+			f.Remap(p.Modes[0].Channels)
+			f.Mode = p.Modes[0].Name
+		}
+		// The spider's first channel map was a guess (bars on 1-2, RGBW on
+		// 5-8); the rig check found the colors on 2-7.
+		if f.Profile == "spider-10ch" && len(f.Channels) == 10 && f.Channels[0].Type == fixture.Tilt {
+			p, _ := fixture.FindProfile(f.Profile)
+			f.Remap(p.Modes[0].Channels)
+		}
+		f.Normalize()
 	}
+	c.dropUplights()
+}
+
+// dropUplights must be called with mu held. Patches saved before the
+// uplights were taken out still have six of them, switched off, at addresses
+// that overlap the spots, wash and spider. They are removed (unless they are
+// the only lights), and saved looks are renumbered so they still fit.
+func (c *Controller) dropUplights() {
+	keep := map[int]int{} // old patch index -> new
+	var fixtures []fixture.Fixture
+	for i, f := range c.cfg.Fixtures {
+		if f.Profile == UplightProfile {
+			continue
+		}
+		keep[i] = len(fixtures)
+		fixtures = append(fixtures, f)
+	}
+	if len(fixtures) == len(c.cfg.Fixtures) || len(fixtures) == 0 {
+		return
+	}
+	c.cfg.Fixtures = fixtures
+	look := func(in []SceneFixture) []SceneFixture {
+		var out []SceneFixture
+		for i, sf := range in {
+			if _, ok := keep[i]; ok {
+				out = append(out, sf)
+			}
+		}
+		return out
+	}
+	idx := func(in []int) []int {
+		var out []int
+		for _, i := range in {
+			if j, ok := keep[i]; ok {
+				out = append(out, j)
+			}
+		}
+		return out
+	}
+	for i := range c.cfg.Scenes {
+		c.cfg.Scenes[i].Fixtures = look(c.cfg.Scenes[i].Fixtures)
+	}
+	for i := range c.cfg.Moods {
+		m := &c.cfg.Moods[i]
+		m.Fixtures = look(m.Fixtures)
+		for j := range m.Points {
+			m.Points[j].Fixtures = look(m.Points[j].Fixtures)
+		}
+		var runs []ProgramRun
+		for _, r := range m.Runs {
+			if r.Fixtures = idx(r.Fixtures); len(r.Fixtures) > 0 {
+				runs = append(runs, r)
+			}
+		}
+		m.Runs = runs
+		var moves []MoveRun
+		for _, r := range m.Moves {
+			if r.Fixtures = idx(r.Fixtures); len(r.Fixtures) > 0 {
+				moves = append(moves, r)
+			}
+		}
+		m.Moves = moves
+	}
+	c.changed()
 }
 
 // changed must be called with mu held after any edit worth saving.
@@ -147,6 +252,13 @@ func (c *Controller) changed() {
 		c.saveT.Stop()
 	}
 	c.saveT = time.AfterFunc(300*time.Millisecond, func() { _ = c.Save() })
+}
+
+// TargetIP is the AN2's address.
+func (c *Controller) TargetIP() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cfg.TargetIP
 }
 
 // RemotePIN returns the PIN for remote devices, creating a 6-digit one the
@@ -192,10 +304,17 @@ func (c *Controller) Run(ctx context.Context) {
 	tick := time.NewTicker(time.Second / time.Duration(fps))
 	poll := time.NewTicker(3 * time.Second)
 	sched := time.NewTicker(time.Second)
+	auto := time.NewTicker(250 * time.Millisecond)
+	defer auto.Stop()
 	defer tick.Stop()
 	defer poll.Stop()
 	defer sched.Stop()
 	c.CheckSchedule()
+	c.mu.Lock()
+	if c.cfg.AutoOn && !c.auto.on {
+		c.autoStart(c.now()) // it was on when the app stopped
+	}
+	c.mu.Unlock()
 	c.Poll()
 	for {
 		select {
@@ -207,6 +326,8 @@ func (c *Controller) Run(ctx context.Context) {
 			c.Poll()
 		case <-sched.C:
 			c.CheckSchedule()
+		case <-auto.C:
+			c.autoTick()
 		}
 	}
 }
@@ -262,11 +383,16 @@ func (c *Controller) frames() map[int][]byte {
 	}
 	fixtures, out := c.performLook(now)
 	c.live = fixtures
+	if st, _, _ := c.checkNow(now); st != nil {
+		fixtures, out = checkLook(fixtures, st), fixture.Output{Master: 100}
+	}
 	if phase := c.testPhase(now); phase >= 0 {
 		fixtures = testLook(fixtures, testColors[phase])
 		out = fixture.Output{Master: 100}
 	}
-	return fixture.Render(fixtures, out)
+	frames := fixture.Render(fixtures, out)
+	c.applyManual(frames)
+	return frames
 }
 
 func (c *Controller) testPhase(now time.Time) int {
@@ -300,6 +426,16 @@ func testLook(src []fixture.Fixture, color string) []fixture.Fixture {
 				f.Set(fixture.Green, 255)
 			case "blue":
 				f.Set(fixture.Blue, 255)
+			case "uv":
+				if !f.Set(fixture.UV, 255) {
+					f.Set(fixture.Red, 120)
+					f.Set(fixture.Blue, 255)
+				}
+			case "amber":
+				if !f.Set(fixture.Amber, 255) {
+					f.Set(fixture.Red, 255)
+					f.Set(fixture.Green, 110)
+				}
 			case "white":
 				if !f.Set(fixture.White, 255) {
 					f.Set(fixture.Red, 255)
@@ -344,6 +480,10 @@ type State struct {
 	Perform     PerformState          `json:"perform"`
 	Moods       []MoodInfo            `json:"moods"`
 	Schedule    ScheduleState         `json:"schedule"`
+	Show        ShowState             `json:"show"`
+	Faders      FaderState            `json:"faders"`
+	Auto        AutoState             `json:"auto"`
+	Tools       ToolsState            `json:"tools"`
 }
 
 // State snapshots everything the UI needs.
@@ -356,6 +496,7 @@ func (c *Controller) State() State {
 		FixtureMode: 6, Addresses: []int{}, Names: []string{}, Fixtures: []FixtureView{},
 		Conflicts: fixture.Overlaps(c.cfg.Fixtures), ConfigPath: c.path, Types: fixture.ChannelTypes,
 		Perform: c.performState(), Moods: c.moodInfos(), Schedule: c.scheduleState(),
+		Show: c.showState(), Faders: c.faderState(), Auto: c.autoInfo(), Tools: c.toolsState(),
 	}
 	if s.Conflicts == nil {
 		s.Conflicts = []fixture.Conflict{}
@@ -656,6 +797,7 @@ func (c *Controller) SetPatch(fixtures []fixture.Fixture) error {
 	c.cfg.Fixtures = fixtures
 	c.fades = map[int]*fade{}
 	c.runs = nil
+	c.moves = nil
 	c.stopMotion()
 	c.changed()
 	return nil

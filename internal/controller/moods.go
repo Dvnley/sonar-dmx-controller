@@ -28,6 +28,7 @@ type Mood struct {
 	Name     string         `json:"name"`
 	Fixtures []SceneFixture `json:"fixtures"`
 	Runs     []ProgramRun   `json:"runs,omitempty"`
+	Moves    []MoveRun      `json:"moves,omitempty"` // movement of the moving lights
 	Master   int            `json:"master"`
 	Rainbow  float64        `json:"rainbow_s,omitempty"`
 	// Points make it a moving mood: it glides from one to the next.
@@ -89,13 +90,14 @@ type Occurrence struct {
 // ScheduleState is the schedule part of GET /api/state.
 type ScheduleState struct {
 	Schedule
-	Now      string      `json:"now"`
-	Zone     string      `json:"zone"`
-	Current  *Occurrence `json:"current"`
-	Next     *Occurrence `json:"next"`
-	Playing  string      `json:"playing"` // name of the last mood played, by hand or by the schedule
-	ByHand   bool        `json:"by_hand"` // the last mood was picked by hand, not by the schedule
-	Problems []string    `json:"problems"`
+	Now       string      `json:"now"`
+	Zone      string      `json:"zone"`
+	Current   *Occurrence `json:"current"`
+	Next      *Occurrence `json:"next"`
+	PlayingID string      `json:"playing_id"`
+	Playing   string      `json:"playing"` // name of the last mood played, by hand or by the schedule
+	ByHand    bool        `json:"by_hand"` // the last mood was picked by hand, not by the schedule
+	Problems  []string    `json:"problems"`
 }
 
 func (c *Controller) findMood(id string) int {
@@ -131,6 +133,11 @@ func (c *Controller) captureMood() Mood {
 		run := *r
 		run.Fixtures = append([]int(nil), r.Fixtures...)
 		m.Runs = append(m.Runs, run)
+	}
+	for _, r := range c.moves {
+		run := *r
+		run.Fixtures = append([]int(nil), r.Fixtures...)
+		m.Moves = append(m.Moves, run)
 	}
 	return m
 }
@@ -225,6 +232,7 @@ func (c *Controller) PlayMood(id string, fadeSec float64) error {
 	if id != MoodOff && c.findMood(id) < 0 {
 		return fmt.Errorf("no mood %q", id)
 	}
+	c.rememberForUndo()
 	c.applyMood(id, fadeSec)
 	c.moodByHand = true
 	return nil
@@ -232,6 +240,16 @@ func (c *Controller) PlayMood(id string, fadeSec float64) error {
 
 // applyMood must be called with mu held.
 func (c *Controller) applyMood(id string, fadeSec float64) {
+	c.auto.on, c.cfg.AutoOn = false, false // a mood picked by hand or by the schedule ends Auto
+	var m *Mood
+	if id != MoodOff {
+		m = &c.cfg.Moods[c.findMood(id)]
+	}
+	c.playMood(m, id, fadeSec)
+}
+
+// playMood must be called with mu held. A nil mood is Lights off.
+func (c *Controller) playMood(mp *Mood, id string, fadeSec float64) {
 	now := c.now()
 	if dur := time.Duration(math.Min(math.Max(fadeSec, 0), MaxMoodFade.Seconds()) * float64(time.Second)); dur > 0 && len(c.live) == len(c.cfg.Fixtures) {
 		from := make([]fixture.Fixture, len(c.live))
@@ -245,16 +263,16 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 	}
 	c.fades = map[int]*fade{}
 	c.flashUntil, c.strobeHz, c.blackout = time.Time{}, 0, false
-	c.runs, c.rainbowSec = nil, 0
+	c.runs, c.rainbowSec, c.moves = nil, 0, nil
 	c.cycle, c.pulse, c.playingID, c.dark = nil, 0, id, false
-	if id == MoodOff {
+	if mp == nil {
 		// fade to dark, then hold a blackout (the Blackout button undoes it)
 		c.dark = true
 		c.playing = "Lights off"
 		c.changed()
 		return
 	}
-	m := c.cfg.Moods[c.findMood(id)]
+	m := *mp
 	for i, sf := range m.Fixtures {
 		if i >= len(c.cfg.Fixtures) {
 			break
@@ -289,6 +307,20 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 		run.start = now
 		c.removeFromRuns(run.Fixtures)
 		c.runs = append(c.runs, &run)
+	}
+	for _, r := range m.Moves {
+		run := r
+		run.Fixtures = nil
+		for _, i := range r.Fixtures {
+			if i >= 0 && i < len(c.cfg.Fixtures) && moves(c.cfg.Fixtures[i]) {
+				run.Fixtures = append(run.Fixtures, i)
+			}
+		}
+		if len(run.Fixtures) == 0 || !validMovement(run.Pattern) {
+			continue
+		}
+		run.last = now
+		c.moves = append(c.moves, &run)
 	}
 	if m.Rainbow > 0 && c.cycle == nil {
 		c.rainbowSec, c.rainbowStart = m.Rainbow, now
@@ -408,6 +440,7 @@ func (c *Controller) AddStarterMoods() int {
 		c.cfg.Moods = append(c.cfg.Moods, m)
 		added++
 	}
+	added += c.addShowLooks()
 	if added > 0 {
 		c.changed()
 	}
@@ -445,7 +478,7 @@ func (c *Controller) SetSchedule(s Schedule) error {
 			return fmt.Errorf("line %d: %q is not a time like 21:30", i+1, e.Time)
 		}
 		e.Time = fmt.Sprintf("%02d:%02d", hh, mm)
-		if e.Mood != MoodOff && c.findMood(e.Mood) < 0 {
+		if e.Mood != MoodOff && e.Mood != MoodAuto && c.findMood(e.Mood) < 0 {
 			return fmt.Errorf("line %d: pick a mood", i+1)
 		}
 		days := map[int]bool{}
@@ -506,7 +539,7 @@ func (c *Controller) occurrence(now time.Time, forward bool) *Occurrence {
 		day := time.Date(local.Year(), local.Month(), local.Day()+d, 12, 0, 0, 0, loc)
 		for i, e := range c.cfg.Schedule.Entries {
 			hh, mm, ok := parseClock(e.Time)
-			if !ok || !e.onDay(day.Weekday()) || (e.Mood != MoodOff && c.findMood(e.Mood) < 0) {
+			if !ok || !e.onDay(day.Weekday()) || (e.Mood != MoodOff && e.Mood != MoodAuto && c.findMood(e.Mood) < 0) {
 				continue
 			}
 			at := time.Date(day.Year(), day.Month(), day.Day(), hh, mm, 0, 0, loc)
@@ -556,6 +589,11 @@ func (c *Controller) CheckSchedule() {
 		fadeSec = 0 // just launched: go straight to it
 	}
 	c.schedKey, c.started = key, true
+	if e.Mood == MoodAuto {
+		c.autoStart(c.now())
+		c.moodByHand = false
+		return
+	}
 	c.applyMood(e.Mood, fadeSec)
 	c.moodByHand = false
 }
@@ -565,7 +603,7 @@ func (c *Controller) scheduleState() ScheduleState {
 	now := c.now()
 	loc := c.schedLocation()
 	s := ScheduleState{Schedule: c.cfg.Schedule, Now: now.In(loc).Format("Mon 3:04 PM"), Zone: loc.String(),
-		Playing: c.playing, ByHand: c.moodByHand, Problems: []string{}}
+		Playing: c.playing, PlayingID: c.playingID, ByHand: c.moodByHand, Problems: []string{}}
 	if s.Entries == nil {
 		s.Entries = []ScheduleEntry{}
 	}
@@ -603,7 +641,7 @@ func (c *Controller) moodInfos() []MoodInfo {
 				}
 			}
 			switch r.Program {
-			case "rainbow":
+			case "rainbow", "disco":
 				for _, h := range []float64{0, 0.17, 0.33, 0.5, 0.67, 0.83} {
 					cr, cg, cb := hsv(h, 1, 1)
 					add(fmt.Sprintf("rgb(%d,%d,%d)", cr, cg, cb))
@@ -614,6 +652,20 @@ func (c *Controller) moodInfos() []MoodInfo {
 			case "fire":
 				add("rgb(255,30,0)")
 				add("rgb(255,140,0)")
+			case "water":
+				add("rgb(0,25,255)")
+				add("rgb(0,150,255)")
+				add("rgb(235,245,255)")
+			case "ocean":
+				add("rgb(0,30,255)")
+				add("rgb(0,220,180)")
+			case "sunset":
+				add("rgb(255,140,0)")
+				add("rgb(255,0,60)")
+				add("rgb(170,0,200)")
+			case "lightning":
+				add("rgb(10,0,90)")
+				add("rgb(255,255,255)")
 			default:
 				for _, p := range Palettes[clamp(r.Variation, 0, len(Palettes)-1)].Colors {
 					add(fmt.Sprintf("rgb(%d,%d,%d)", p[0], p[1], p[2]))
