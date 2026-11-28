@@ -160,17 +160,21 @@ function renderShow() {
   $$("#tab-show .sh-glow").forEach(el => el.style.setProperty("--lc", glow(+el.dataset.i)));
 
   const groups = showGroups();
-  if (shSel !== "all" && !groups.some(g => g.key === shSel)) shSel = "all";
+  if (shSel !== "all" && shSel !== "schedule" && !groups.some(g => g.key === shSel)) shSel = "all";
   const sig = JSON.stringify([groups.map(g => [g.key, g.name, g.on, g.list.map(f => [f.brightness, f.values, f.enabled])]),
     p.runs.map(r => [r.program, r.fixtures, r.variation]), sh.moves.map(r => [r.pattern, r.fixtures, r.size]),
-    sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length]);
-  if (sig === showSig || dragging) return;
+    sh.rig_ok, rigArmed, showVar, showSize, shSel, showPrograms.length,
+    shSel === "schedule" ? [state.schedule, state.moods.map(m => [m.id, m.name, m.colors]), lookDelArmed, addingRow] : 0]);
+  // don't rebuild the schedule while a time or look is being picked
+  const editing = shSel === "schedule" && document.activeElement && document.activeElement.closest && document.activeElement.closest("#sh-panel") && /INPUT|SELECT/.test(document.activeElement.tagName);
+  if (sig === showSig || dragging || editing) return;
   showSig = sig;
 
   renderRig(sh);
   renderLights(groups);
   const panel = $("#sh-panel");
-  if (shSel === "all") renderEverything(panel, groups);
+  if (shSel === "schedule") renderSchedule(panel);
+  else if (shSel === "all") renderEverything(panel, groups);
   else renderLight(panel, groups.find(g => g.key === shSel));
 }
 
@@ -196,10 +200,13 @@ function renderLights(groups) {
   const anyOn = groups.filter(g => g.on);
   el.innerHTML = `<button class="sh-light ${shSel === "all" ? "sel" : ""}" data-k="all">
       <span class="sh-dots">${anyOn.slice(0, 3).map(g => `<i class="sh-glow" data-i="${g.list[0].index}" style="--lc:${glow(g.list[0].index)}"></i>`).join("")}</span>
-      <span class="sh-lname">Everything</span><span class="sh-ldo">All lights together</span></button>` +
+      <span class="sh-lname">Everything</span><span class="sh-ldo">All lights</span></button>` +
     groups.map(g => `<button class="sh-light ${shSel === g.key ? "sel" : ""} ${g.on ? "" : "off"}" data-k="${esc(g.key)}">
       <i class="sh-glow" data-i="${g.list[0].index}" style="--lc:${glow(g.list[0].index)}"></i>
-      <span class="sh-lname">${esc(g.name)}</span><span class="sh-ldo">${esc(doing(g))}</span></button>`).join("");
+      <span class="sh-lname">${esc(g.name)}</span><span class="sh-ldo">${esc(doing(g))}</span></button>`).join("") +
+    `<button class="sh-light sh-schedbtn ${shSel === "schedule" ? "sel" : ""}" data-k="schedule">
+      <i class="sh-clock">◷</i><span class="sh-lname">Schedule</span>
+      <span class="sh-ldo">${state.schedule.enabled ? (state.schedule.next ? "Next " + esc(state.schedule.next.clock.replace(/^\w+ /, "")) : "On") : "Off"}</span></button>`;
   $$(".sh-light", el).forEach(b => b.onclick = () => { shSel = b.dataset.k; savePref("showsel", shSel); showSig = ""; renderShow(); });
 }
 
@@ -320,4 +327,100 @@ function renderLight(panel, g) {
     chans.forEach((ch, i) => { if (ch.type === "pan" || ch.type === "tilt") vals[i + 1] = 128; });
     Promise.all(g.idx.map(fi => api("/api/fixture", { index: fi, values: vals })));
   };
+}
+
+// ---------- simple schedule ----------
+const DAY_SETS = [["Every day", []], ["Mon–Fri", [1, 2, 3, 4, 5]], ["Fri & Sat", [5, 6]], ["Sat & Sun", [0, 6]]];
+let lookDelArmed = "";
+let addingRow = false;
+
+function daysKey(days) {
+  const d = (days || []).slice().sort().join(",");
+  const hit = DAY_SETS.find(([, v]) => v.slice().sort().join(",") === d);
+  return hit ? hit[0] : "Custom";
+}
+
+function clockLabel(t) {
+  const [h, m] = t.split(":").map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+function scheduleRows(panel) {
+  return $$(".sh-srow", panel).map(r => {
+    const days = $("[data-days]", r).value;
+    const known = DAY_SETS.find(d => d[0] === days);
+    return {
+      time: $("[data-time]", r).value || "20:00",
+      mood: $("[data-mood]", r).value,
+      days: known ? known[1] : JSON.parse(r.dataset.days || "[]"),
+      fade: $("[data-mood]", r).value === "off" ? 60 : 30,
+    };
+  }).filter(e => e.mood);
+}
+
+function saveShowSchedule(panel, enabled) {
+  const sc = state.schedule;
+  let tzName = "";
+  try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
+  return api("/api/schedule", { enabled: enabled === undefined ? sc.enabled : enabled, time_zone: sc.time_zone || tzName, entries: scheduleRows(panel) });
+}
+
+function renderSchedule(panel) {
+  const sc = state.schedule, moods = state.moods || [];
+  const status = !sc.enabled ? "The schedule is off. The lights only change when you change them."
+    : sc.next ? `Next: <b>${esc(sc.next.name)}</b> at ${esc(sc.next.clock)}` + (sc.current ? ` · now playing <b>${esc(sc.current.name)}</b>` : "")
+      : "Add a time below.";
+  const look = id => `<option value="off" ${id === "off" ? "selected" : ""}>Lights off</option>` +
+    moods.map(m => `<option value="${esc(m.id)}" ${m.id === id ? "selected" : ""}>${esc(m.name)}</option>`).join("");
+  const row = e => `<div class="sh-srow" data-days='${JSON.stringify(e.days || [])}'>
+      <input type="time" value="${esc(e.time)}" data-time>
+      <select data-mood>${look(e.mood)}</select>
+      <select data-days>${DAY_SETS.map(([n]) => `<option ${n === daysKey(e.days) ? "selected" : ""}>${n}</option>`).join("")}${daysKey(e.days) === "Custom" ? `<option selected>Custom</option>` : ""}</select>
+      <button class="sh-x" data-del title="Remove this time">✕</button>
+    </div>`;
+  const entries = sc.entries.slice();
+  if (addingRow) entries.push({ time: "20:00", mood: moods.length ? moods[0].id : "off", days: [] });
+
+  panel.innerHTML = `<div class="sh-phead"><div><h2>Schedule</h2><p>${status}</p></div>
+      <button class="sh-switch ${sc.enabled ? "on" : ""}" data-sched><span></span>${sc.enabled ? "On" : "Off"}</button></div>
+    ${section("1. Save looks", `<p class="hint sh-tight">Set the lights the way you like (colors, effect, movement, speed), then give it a name.</p>
+      <div class="sh-saveline"><input id="sh-lookname" placeholder="Name, e.g. Chill blue" maxlength="40"><button id="sh-savelook" class="primary">Save look</button></div>
+      <div class="sh-looks">${moods.map(m => `<span class="sh-look"><i style="background:${esc((m.colors || [])[0] || "#333")}"></i>
+        <button data-play="${esc(m.id)}" title="Show this look now">${esc(m.name)}</button>
+        <button class="sh-x" data-forget="${esc(m.id)}" title="Delete this look">${lookDelArmed === m.id ? "Delete?" : "✕"}</button></span>`).join("")}
+        ${moods.length ? "" : `<button id="sh-starters">Add some ready-made looks</button>`}</div>`)}
+    ${section("2. Pick when they play", `<div class="sh-rows">${entries.map(row).join("") || `<p class="hint sh-tight">No times yet.</p>`}</div>
+      <button class="sh-link" id="sh-addtime">+ Add a time</button>`, "it fades into each look over 30 seconds")}
+    <p class="hint sh-tight">Keep this app open and the Mac awake (the START file keeps it awake) for the schedule to run.</p>`;
+
+  $("[data-sched]", panel).onclick = () => { addingRow = false; saveShowSchedule(panel, !sc.enabled); };
+  $("#sh-savelook", panel).onclick = async () => {
+    const name = $("#sh-lookname", panel).value.trim();
+    if (!name) { $("#sh-lookname", panel).focus(); return; }
+    await api("/api/mood/save", { name });
+    showSig = ""; renderShow();
+  };
+  $("#sh-lookname", panel).onkeydown = e => { if (e.key === "Enter") $("#sh-savelook", panel).click(); };
+  const st = $("#sh-starters", panel);
+  if (st) st.onclick = () => api("/api/mood/starters", {});
+  $$("[data-play]", panel).forEach(b => b.onclick = () => api("/api/mood/play", { id: b.dataset.play, fade: 2 }));
+  $$("[data-forget]", panel).forEach(b => b.onclick = async () => {
+    if (lookDelArmed !== b.dataset.forget) { lookDelArmed = b.dataset.forget; showSig = ""; renderShow(); return; }
+    lookDelArmed = "";
+    await api("/api/mood/delete", { id: b.dataset.forget });
+  });
+  $("#sh-addtime", panel).onclick = () => {
+    const sc2 = state.schedule;
+    const last = sc2.entries.length ? sc2.entries[sc2.entries.length - 1].time : "19:00";
+    const [h, m] = last.split(":").map(Number);
+    const time = `${String((h + 2) % 24).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const entries = scheduleRows(panel).concat([{ time, mood: moods.length ? moods[0].id : "off", days: [], fade: 30 }]);
+    let tzName = "";
+    try { tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (_) { /* ignore */ }
+    api("/api/schedule", { enabled: sc2.enabled, time_zone: sc2.time_zone || tzName, entries });
+  };
+  $$(".sh-srow", panel).forEach(r => {
+    $$("input, select", r).forEach(el => el.onchange = async () => { addingRow = false; await saveShowSchedule(panel); });
+    $("[data-del]", r).onclick = async () => { r.remove(); addingRow = false; await saveShowSchedule(panel); };
+  });
 }

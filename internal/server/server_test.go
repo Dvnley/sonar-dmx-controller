@@ -173,7 +173,7 @@ func TestProgramEndpoints(t *testing.T) {
 	if code, _ := do(t, h, "POST", "/api/beat", `{"source":"tap"}`); code != 204 {
 		t.Errorf("beat: %d", code)
 	}
-	if code, out := do(t, h, "GET", "/api/programs", ""); code != 200 || len(out["programs"].([]any)) != 10 {
+	if code, out := do(t, h, "GET", "/api/programs", ""); code != 200 || len(out["programs"].([]any)) != len(controller.Programs) {
 		t.Errorf("programs: %d %v", code, out)
 	}
 	if code, _ := do(t, h, "POST", "/api/program", `{"program":"nope"}`); code != 400 {

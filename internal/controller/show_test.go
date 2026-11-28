@@ -2,6 +2,8 @@ package controller
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -156,5 +158,49 @@ func TestHandFaders(t *testing.T) {
 	}
 	if err := c.SetFader(0, 513, 1); err == nil {
 		t.Fatal("513 accepted")
+	}
+}
+
+func TestOldSpotPatchMovesTo10CH(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	old := `{"fixtures":[{"name":"Spots","profile":"gobo-spot-11ch","mode":"11CH","address":1,"enabled":true,"brightness":100,
+	  "channels":[{"name":"Up / down","type":"tilt"},{"name":"f","type":"tilt_fine"},{"name":"Left / right","type":"pan"},{"name":"f","type":"pan_fine"},
+	  {"name":"s","type":"speed"},{"name":"Brightness","type":"dimmer"},{"name":"st","type":"shutter"},{"name":"Color wheel","type":"color"},
+	  {"name":"Gobo","type":"gobo"},{"name":"a","type":"auto"},{"name":"r","type":"reset"}],
+	  "values":[40,0,90,0,0,255,0,30,60,0,0]}]}`
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := New(path, &fakeNet{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := c.State().Fixtures[0]
+	if len(f.Channels) != 10 || f.Mode != "10CH" || f.Channels[8].Type != "color" || f.Channels[9].Type != "gobo" {
+		t.Fatalf("not migrated: %+v", f.Channels)
+	}
+	if v := f.Values; v[0] != 40 || v[2] != 90 || v[5] != 255 || v[8] != 30 || v[9] != 60 {
+		t.Fatalf("values not kept: %v", v)
+	}
+}
+
+func TestMoodKeepsMovement(t *testing.T) {
+	c, _ := newTest(t)
+	if err := c.SetupRig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.StartMovement(nil, MoveRun{Pattern: "figure8", Speed: 30, Size: 60}); err != nil {
+		t.Fatal(err)
+	}
+	id, err := c.SaveMood("", "Moving")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.StopMovement(nil)
+	if err := c.PlayMood(id, 0); err != nil {
+		t.Fatal(err)
+	}
+	if mv := c.State().Show.Moves; len(mv) != 1 || mv[0].Pattern != "figure8" || len(mv[0].Fixtures) != 2 {
+		t.Fatalf("moves %+v", mv)
 	}
 }

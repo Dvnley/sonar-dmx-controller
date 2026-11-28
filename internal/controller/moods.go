@@ -28,6 +28,7 @@ type Mood struct {
 	Name     string         `json:"name"`
 	Fixtures []SceneFixture `json:"fixtures"`
 	Runs     []ProgramRun   `json:"runs,omitempty"`
+	Moves    []MoveRun      `json:"moves,omitempty"` // movement of the moving lights
 	Master   int            `json:"master"`
 	Rainbow  float64        `json:"rainbow_s,omitempty"`
 	// Points make it a moving mood: it glides from one to the next.
@@ -131,6 +132,11 @@ func (c *Controller) captureMood() Mood {
 		run := *r
 		run.Fixtures = append([]int(nil), r.Fixtures...)
 		m.Runs = append(m.Runs, run)
+	}
+	for _, r := range c.moves {
+		run := *r
+		run.Fixtures = append([]int(nil), r.Fixtures...)
+		m.Moves = append(m.Moves, run)
 	}
 	return m
 }
@@ -245,7 +251,7 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 	}
 	c.fades = map[int]*fade{}
 	c.flashUntil, c.strobeHz, c.blackout = time.Time{}, 0, false
-	c.runs, c.rainbowSec = nil, 0
+	c.runs, c.rainbowSec, c.moves = nil, 0, nil
 	c.cycle, c.pulse, c.playingID, c.dark = nil, 0, id, false
 	if id == MoodOff {
 		// fade to dark, then hold a blackout (the Blackout button undoes it)
@@ -289,6 +295,20 @@ func (c *Controller) applyMood(id string, fadeSec float64) {
 		run.start = now
 		c.removeFromRuns(run.Fixtures)
 		c.runs = append(c.runs, &run)
+	}
+	for _, r := range m.Moves {
+		run := r
+		run.Fixtures = nil
+		for _, i := range r.Fixtures {
+			if i >= 0 && i < len(c.cfg.Fixtures) && moves(c.cfg.Fixtures[i]) {
+				run.Fixtures = append(run.Fixtures, i)
+			}
+		}
+		if len(run.Fixtures) == 0 || !validMovement(run.Pattern) {
+			continue
+		}
+		run.last = now
+		c.moves = append(c.moves, &run)
 	}
 	if m.Rainbow > 0 && c.cycle == nil {
 		c.rainbowSec, c.rainbowStart = m.Rainbow, now
@@ -603,7 +623,7 @@ func (c *Controller) moodInfos() []MoodInfo {
 				}
 			}
 			switch r.Program {
-			case "rainbow":
+			case "rainbow", "disco":
 				for _, h := range []float64{0, 0.17, 0.33, 0.5, 0.67, 0.83} {
 					cr, cg, cb := hsv(h, 1, 1)
 					add(fmt.Sprintf("rgb(%d,%d,%d)", cr, cg, cb))
@@ -614,6 +634,16 @@ func (c *Controller) moodInfos() []MoodInfo {
 			case "fire":
 				add("rgb(255,30,0)")
 				add("rgb(255,140,0)")
+			case "ocean":
+				add("rgb(0,30,255)")
+				add("rgb(0,220,180)")
+			case "sunset":
+				add("rgb(255,140,0)")
+				add("rgb(255,0,60)")
+				add("rgb(170,0,200)")
+			case "lightning":
+				add("rgb(10,0,90)")
+				add("rgb(255,255,255)")
 			default:
 				for _, p := range Palettes[clamp(r.Variation, 0, len(Palettes)-1)].Colors {
 					add(fmt.Sprintf("rgb(%d,%d,%d)", p[0], p[1], p[2]))

@@ -152,7 +152,16 @@ func (c *Controller) normalize() {
 	}
 	c.cfg.Master = clamp(c.cfg.Master, 0, 100)
 	for i := range c.cfg.Fixtures {
-		c.cfg.Fixtures[i].Normalize()
+		f := &c.cfg.Fixtures[i]
+		// The spots turned out to be 10CH with the color wheel on 9 and the
+		// pattern spin on 10; patches saved with the first 11CH guess move
+		// over, keeping their values by channel type.
+		if f.Profile == "gobo-spot-11ch" && f.Mode == "11CH" {
+			p, _ := fixture.FindProfile(f.Profile)
+			f.Remap(p.Modes[0].Channels)
+			f.Mode = p.Modes[0].Name
+		}
+		f.Normalize()
 	}
 }
 

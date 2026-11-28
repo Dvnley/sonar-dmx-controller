@@ -116,14 +116,14 @@ var Profiles = []Profile{
 	},
 	{
 		ID: "gobo-spot-11ch", Name: "Gobo moving-head spot", Kind: "moving",
-		Notes: "Danley's spots: ch 1 moves up/down, ch 3 left/right, ch 6 is brightness (checked on the rig). " +
-			"The other channels follow the usual layout of these lights and are a guess until checked with the channel sweep.",
-		Modes: []Mode{{Name: "11CH", Channels: []Channel{
+		Notes: "Danley's spots, 10CH: ch 1 up/down, 3 left/right, 6 brightness, 9 color wheel, 10 pattern spin/spread (checked on the rig). " +
+			"Channels 2, 4, 5, 7 and 8 follow the usual layout of these lights and are not checked yet.",
+		Modes: []Mode{{Name: "10CH", Channels: []Channel{
 			ch("Up / down", Tilt, 128), ch("Up / down fine", TiltFine, 0),
 			ch("Left / right", Pan, 128), ch("Left / right fine", PanFine, 0),
 			ch("Move speed", Speed, 0), ch("Brightness", Dimmer, 255),
-			ch("Strobe", Shutter, 0), ch("Color wheel", Color, 0), ch("Gobo", Gobo, 0),
-			ch("Auto/sound", Auto, 0), ch("Reset", Reset, 0),
+			ch("Strobe", Shutter, 0), ch("Ch 8 (not checked)", Generic, 0),
+			ch("Color wheel", Color, 0), ch("Pattern spin / spread", Gobo, 0),
 		}}},
 	},
 	{

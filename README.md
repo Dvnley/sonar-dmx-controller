@@ -77,11 +77,13 @@ uplights stay in the patch but are switched off, because 1-36 overlaps the
 others. An older config keeps its own patch: the Show tab offers **Load my
 rig** to switch to this one.
 
-Spot channels (checked on the rig: 1, 3 and 6; the rest is the usual layout
-for these spots):
+Spot channels, 10CH (checked on the rig: 1, 3, 6, 9 and 10; the rest is the
+usual layout for these spots):
 
 1 Up/down · 2 Up/down fine · 3 Left/right · 4 Left/right fine · 5 Move speed ·
-6 Brightness · 7 Strobe · 8 Color wheel · 9 Gobo · 10 Auto/sound · 11 Reset
+6 Brightness · 7 Strobe · 8 not checked · 9 Color wheel · 10 Pattern spin/spread
+
+Configs saved with the first 11CH guess are moved to this layout on launch.
 
 Spider channels, **a guess** for the common 8-eye RGBW spider in 10CH mode:
 
@@ -102,7 +104,8 @@ channel map in the Patch tab or make a preset in **Fixture presets**. The old
   moving light. Below, one box per light type (Spots, Chauvet wash, Spider)
   with its DMX address, on/off, brightness, colors, its own effect and
   movement, aim sliders named for what they do, and every channel with its
-  number.
+  number. The last button, **Schedule**, saves the current look by name and
+  plays looks (or Lights off) at set times, every day or on chosen days.
 - **Faders**: every DMX channel 1-512 by hand, 16 at a time like a hardware desk, labelled with the light and what the channel does. A moved fader overrides the app on that channel until you tap Auto or hand everything back. Blackout still wins. Also says plainly whether the Mac can reach the AN2.
 - **Perform** (built for the iPad). Pick a layout at the top:
   - **Groups**: a column per fixture type (uplights, wash, spot) with color

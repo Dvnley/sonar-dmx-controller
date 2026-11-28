@@ -26,6 +26,8 @@ var Programs = []ProgramInfo{
 	{"chase", "Chase"}, {"jump", "Color jump"}, {"fade", "Color fade"}, {"rainbow", "Rainbow"},
 	{"wave", "Wave"}, {"pulse", "Pulse"}, {"strobe", "Strobe pop"}, {"police", "Police"},
 	{"fire", "Fire"}, {"sparkle", "Sparkle"},
+	{"breathe", "Breathe"}, {"heartbeat", "Heartbeat"}, {"lightning", "Lightning"},
+	{"ocean", "Ocean"}, {"sunset", "Sunset"}, {"disco", "Disco"},
 }
 
 // Palettes are the program variations.
@@ -306,6 +308,39 @@ func programColor(r *ProgramRun, pos float64, k, n int) ([3]uint8, float64) {
 		t := math.Floor(pos * 6)
 		flick := 0.55 + 0.45*noise(t, k)
 		return mixRGB([3]uint8{255, 30, 0}, [3]uint8{255, 140, 0}, noise(t+7, k)), flick
+	case "breathe":
+		// slow swell up and down through the palette, never fully dark
+		level := 0.12 + 0.88*(0.5-0.5*math.Cos(2*math.Pi*(pos/8-off)))
+		return at(math.Floor(pos/8 - off)), level
+	case "heartbeat":
+		// two quick thumps per beat pair, then rest
+		t := math.Mod(pos-off*2, 2)
+		level := 0.08 + math.Exp(-t*9) + 0.7*math.Exp(-math.Max(0, t-0.35)*9)*b2f(t > 0.35)
+		return at(math.Floor((pos - off*2) / 2)), clampF(level, 0, 1)
+	case "lightning":
+		// deep blue sky with sudden white flickers
+		t := math.Floor(pos * 8)
+		if noise(math.Floor(pos/2), k) > 0.55 && math.Mod(pos, 2) < 0.4 && noise(t, k) > 0.35 {
+			return [3]uint8{255, 255, 255}, 1
+		}
+		return [3]uint8{10, 0, 90}, 0.6
+	case "ocean":
+		// rolling blues and teals
+		x := 0.5 + 0.5*math.Sin(2*math.Pi*(pos/10-off)) // color
+		y := 0.55 + 0.45*math.Sin(2*math.Pi*(pos/6-off*0.7)+1)
+		return mixRGB([3]uint8{0, 30, 255}, [3]uint8{0, 220, 180}, x), y
+	case "sunset":
+		// a long slow drift through warm colors
+		sun := [][3]uint8{{255, 140, 0}, {255, 50, 0}, {255, 0, 60}, {170, 0, 200}, {255, 50, 0}}
+		x := math.Mod(pos/16+off, float64(len(sun)))
+		i := int(x)
+		return mixRGB(sun[i], sun[(i+1)%len(sun)], x-float64(i)), 1
+	case "disco":
+		// a new random bright color every half beat
+		t := math.Floor(pos*2) + float64(k)*3
+		h := noise(t, k)
+		r8, g8, b8 := hsv(h, 1, 1)
+		return [3]uint8{r8, g8, b8}, 1
 	case "sparkle":
 		t := math.Floor(pos * 4)
 		if noise(t, k) > 0.8 {
@@ -386,4 +421,11 @@ func (c *Controller) SetPosition(index int, x, y float64) error {
 	c.cfg.Fixtures[index].Pos = &fixture.Point{X: clampF(x, 0, 1), Y: clampF(y, 0, 1)}
 	c.changed()
 	return nil
+}
+
+func b2f(b bool) float64 {
+	if b {
+		return 1
+	}
+	return 0
 }
