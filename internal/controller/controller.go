@@ -43,9 +43,8 @@ const UplightProfile = "freedom-flex-h4-ip"
 
 // DefaultConfig is Danley's rig: gobo spots at 1, the Chauvet washes at 17
 // and the spider washes at 34, all on universe 0. Fixtures of one type share
-// an address, so one patch entry drives them all. The six Freedom Flex
-// uplights are kept in the patch but switched off, because their addresses
-// (1-36) overlap the others.
+// an address, so one patch entry drives them all. The Freedom Flex uplights
+// are not in it: Danley doesn't use them and their addresses overlap.
 func DefaultConfig() Config {
 	cfg := Config{TargetIP: "2.0.0.1", FPS: 40, Master: 100}
 	cfg.Fixtures = append(cfg.Fixtures, RigFixtures()...)
@@ -54,12 +53,6 @@ func DefaultConfig() Config {
 
 // RigFixtures is the patch of DefaultConfig.
 func RigFixtures() []fixture.Fixture {
-	var out []fixture.Fixture
-	for i, addr := range []int{1, 7, 13, 19, 25, 31} {
-		f, _ := fixture.New(fmt.Sprintf("Uplight %d", i+1), UplightProfile, "6CH", 0, addr)
-		f.Enabled = false
-		out = append(out, f)
-	}
 	// Start in a color, so the lights show something the moment they are
 	// connected: blue wash, white spider.
 	wash, _ := fixture.New("Chauvet wash", "wash-fx", "3CH", 0, 17)
@@ -67,7 +60,7 @@ func RigFixtures() []fixture.Fixture {
 	spot, _ := fixture.New("Spots", "gobo-spot-11ch", "", 0, 1)
 	spider, _ := fixture.New("Spider", "spider-10ch", "", 0, 34)
 	spider.Set(fixture.White, 255)
-	return append(out, wash, spot, spider)
+	return []fixture.Fixture{wash, spot, spider}
 }
 
 // Sender is the Art-Net side, an interface so tests can capture frames.
@@ -169,6 +162,70 @@ func (c *Controller) normalize() {
 		}
 		f.Normalize()
 	}
+	c.dropUplights()
+}
+
+// dropUplights must be called with mu held. Patches saved before the
+// uplights were taken out still have six of them, switched off, at addresses
+// that overlap the spots, wash and spider. They are removed (unless they are
+// the only lights), and saved looks are renumbered so they still fit.
+func (c *Controller) dropUplights() {
+	keep := map[int]int{} // old patch index -> new
+	var fixtures []fixture.Fixture
+	for i, f := range c.cfg.Fixtures {
+		if f.Profile == UplightProfile {
+			continue
+		}
+		keep[i] = len(fixtures)
+		fixtures = append(fixtures, f)
+	}
+	if len(fixtures) == len(c.cfg.Fixtures) || len(fixtures) == 0 {
+		return
+	}
+	c.cfg.Fixtures = fixtures
+	look := func(in []SceneFixture) []SceneFixture {
+		var out []SceneFixture
+		for i, sf := range in {
+			if _, ok := keep[i]; ok {
+				out = append(out, sf)
+			}
+		}
+		return out
+	}
+	idx := func(in []int) []int {
+		var out []int
+		for _, i := range in {
+			if j, ok := keep[i]; ok {
+				out = append(out, j)
+			}
+		}
+		return out
+	}
+	for i := range c.cfg.Scenes {
+		c.cfg.Scenes[i].Fixtures = look(c.cfg.Scenes[i].Fixtures)
+	}
+	for i := range c.cfg.Moods {
+		m := &c.cfg.Moods[i]
+		m.Fixtures = look(m.Fixtures)
+		for j := range m.Points {
+			m.Points[j].Fixtures = look(m.Points[j].Fixtures)
+		}
+		var runs []ProgramRun
+		for _, r := range m.Runs {
+			if r.Fixtures = idx(r.Fixtures); len(r.Fixtures) > 0 {
+				runs = append(runs, r)
+			}
+		}
+		m.Runs = runs
+		var moves []MoveRun
+		for _, r := range m.Moves {
+			if r.Fixtures = idx(r.Fixtures); len(r.Fixtures) > 0 {
+				moves = append(moves, r)
+			}
+		}
+		m.Moves = moves
+	}
+	c.changed()
 }
 
 // changed must be called with mu held after any edit worth saving.

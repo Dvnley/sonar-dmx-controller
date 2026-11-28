@@ -101,7 +101,7 @@ func TestShowGroupOpensDimmer(t *testing.T) {
 	if err := c.SetupRig(); err != nil {
 		t.Fatal(err)
 	}
-	spot := 7
+	spot := 1
 	if err := c.UpdateFixture(FixtureUpdate{Index: spot, Values: map[string]int{"dimmer": 0}}); err != nil {
 		t.Fatal(err)
 	}
@@ -247,16 +247,43 @@ func TestShowLooksGiveEachLightItsOwnJob(t *testing.T) {
 	for _, r := range s.Perform.Runs {
 		progs[r.Program] = r.Fixtures
 	}
-	if len(progs["disco"]) != 1 || progs["disco"][0] != 6 || len(progs["rainbow"]) != 1 || progs["rainbow"][0] != 8 {
+	if len(progs["disco"]) != 1 || progs["disco"][0] != 0 || len(progs["rainbow"]) != 1 || progs["rainbow"][0] != 2 {
 		t.Fatalf("runs %v", progs)
 	}
-	if len(s.Show.Moves) != 1 || s.Show.Moves[0].Pattern != "figure8" || s.Show.Moves[0].Fixtures[0] != 7 {
+	if len(s.Show.Moves) != 1 || s.Show.Moves[0].Pattern != "figure8" || s.Show.Moves[0].Fixtures[0] != 1 {
 		t.Fatalf("moves %+v", s.Show.Moves)
-	}
-	if s.Fixtures[0].Enabled {
-		t.Fatal("uplights should stay off")
 	}
 	if c.Frames()[0][9] != 200 {
 		t.Fatal("spot pattern spin should be set")
+	}
+}
+
+func TestOldRigLosesUplightsAndKeepsLooks(t *testing.T) {
+	var old []fixture.Fixture
+	for _, addr := range []int{1, 7, 13, 19, 25, 31} {
+		f, _ := fixture.New("Uplight", UplightProfile, "6CH", 0, addr)
+		f.Enabled = false
+		old = append(old, f)
+	}
+	old = append(old, RigFixtures()...) // wash 6, spots 7, spider 8
+	sf := func(b int) SceneFixture { return SceneFixture{Brightness: b, Enabled: true} }
+	mood := Mood{ID: "m", Name: "M", Master: 100,
+		Fixtures: []SceneFixture{sf(1), sf(1), sf(1), sf(1), sf(1), sf(1), sf(60), sf(70), sf(80)},
+		Runs:     []ProgramRun{{Fixtures: []int{0, 6, 8}, Program: "fade"}, {Fixtures: []int{2}, Program: "pulse"}},
+		Moves:    []MoveRun{{Fixtures: []int{7}, Pattern: "circle"}}}
+	c := &Controller{cfg: Config{Fixtures: old, Moods: []Mood{mood}}, now: time.Now, fades: map[int]*fade{}}
+	c.normalize()
+	if len(c.cfg.Fixtures) != 3 {
+		t.Fatalf("fixtures %d", len(c.cfg.Fixtures))
+	}
+	m := c.cfg.Moods[0]
+	if len(m.Fixtures) != 3 || m.Fixtures[0].Brightness != 60 || m.Fixtures[2].Brightness != 80 {
+		t.Fatalf("mood fixtures %+v", m.Fixtures)
+	}
+	if len(m.Runs) != 1 || len(m.Runs[0].Fixtures) != 2 || m.Runs[0].Fixtures[0] != 0 || m.Runs[0].Fixtures[1] != 2 {
+		t.Fatalf("runs %+v", m.Runs)
+	}
+	if len(m.Moves) != 1 || m.Moves[0].Fixtures[0] != 1 {
+		t.Fatalf("moves %+v", m.Moves)
 	}
 }

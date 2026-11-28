@@ -187,7 +187,7 @@ function renderRig(sh) {
   el.classList.toggle("hidden", sh.rig_ok);
   if (sh.rig_ok) return;
   el.innerHTML = `<div><b>Set the app up for your lights?</b>
-    <p>Spots on DMX 1, Chauvet wash on 17, Spider on 34. The uplights get switched off.</p></div>
+    <p>Spots on DMX 1, Chauvet wash on 17, Spider on 34.</p></div>
     <button id="sh-loadrig" class="${rigArmed ? "danger" : "primary"}">${rigArmed ? "Tap again to confirm" : "Set up my lights"}</button>
     ${rigArmed ? `<button id="sh-rigcancel">Cancel</button>` : ""}`;
   $("#sh-loadrig").onclick = async () => {
